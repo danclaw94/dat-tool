@@ -119,6 +119,16 @@ function DatTool() {
     link.href = "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap";
     link.rel = "stylesheet";
     document.head.appendChild(link);
+
+    // Wipe all file data from memory when the tab is closed
+    const handleUnload = () => {
+      setRawBuffer(null);
+      setRawText(null);
+      setRows([]);
+      setHeaders([]);
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
   }, []);
 
   const handleFile = React.useCallback(async (file) => {
@@ -272,6 +282,18 @@ function DatTool() {
             onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
           />
         </div>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6,
+          fontFamily: baseFont, fontSize: 11, color: palette.green,
+          background: "rgba(63,185,80,0.08)", border: "1px solid rgba(63,185,80,0.2)",
+          padding: "8px 16px", borderRadius: 8, marginTop: 8,
+        }}>
+          <svg width="11" height="13" viewBox="0 0 11 13" fill="none">
+            <rect x="1" y="5" width="9" height="7" rx="1.5" stroke={palette.green} strokeWidth="1.4"/>
+            <path d="M3 5V3.5a2.5 2.5 0 015 0V5" stroke={palette.green} strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          100% local processing — your file never leaves this browser tab
+        </div>
         {error && (
           <div style={{ color: palette.red, fontFamily: baseFont, fontSize: 13 }}>
             {error}
@@ -294,6 +316,18 @@ function DatTool() {
           DAT Column Manager
         </div>
         <div style={{ flex: 1 }} />
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6,
+          fontFamily: baseFont, fontSize: 11, color: palette.green,
+          background: "rgba(63,185,80,0.1)", border: "1px solid rgba(63,185,80,0.25)",
+          padding: "4px 10px", borderRadius: 6,
+        }}>
+          <svg width="11" height="13" viewBox="0 0 11 13" fill="none">
+            <rect x="1" y="5" width="9" height="7" rx="1.5" stroke={palette.green} strokeWidth="1.4"/>
+            <path d="M3 5V3.5a2.5 2.5 0 015 0V5" stroke={palette.green} strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          100% local — no data leaves your browser
+        </div>
         <div style={{
           display: "flex", gap: 12, alignItems: "center",
           fontFamily: baseFont, fontSize: 12, color: palette.textDim,
