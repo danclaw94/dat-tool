@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DAT Column Manager</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0E1117; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #161B22; }
+    ::-webkit-scrollbar-thumb { background: #30363D; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #58A6FF; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+
+const DELIMITER = "\x14";
+const QUOTE = "\xFE";
+
+function detectEncoding(buffer) {
+  const bytes = new Uint8Array(buffer.slice(0, 4));
+  if (bytes[0] === 0xFF && bytes[1] === 0xFE) return "utf-16le";
+  if (bytes[0] === 0xFE && bytes[1] === 0xFF) return "utf-16be";
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return "utf-8";
+  return "utf-8";
+}
+
+function parseRow(line) {
+  const sep = QUOTE + DELIMITER + QUOTE;
+  let trimmed = line;
+  if (trimmed.startsWith(QUOTE)) trimmed = trimmed.slice(1);
+  if (trimmed.endsWith(QUOTE)) trimmed = trimmed.slice(0, -1);
+  trimmed = trimmed.replace(/[\r\n]+$/, "");
+  if (trimmed.endsWith(QUOTE)) trimmed = trimmed.slice(0, -1);
+  return trimmed.split(sep);
+}
+
+function encodeRow(fields) {
+  return QUOTE + fields.join(QUOTE + DELIMITER + QUOTE) + QUOTE;
+}
+
+function truncate(s, n) {
+  if (!s) return "";
+  const cleaned = s.replace(/[\x00-\x1F]/g, " ").trim();
+  return cleaned.length > n ? cleaned.slice(0, n) + "…" : cleaned;
+}
+
+const palette = {
+  bg: "#0E1117",
+  surface: "#161B22",
+  surfaceHover: "#1C2129",
+  border: "#30363D",
+  borderActive: "#58A6FF",
+  text: "#E6EDF3",
+  textDim: "#8B949E",
+  accent: "#58A6FF",
+  accentGlow: "rgba(88,166,255,0.15)",
+  green: "#3FB950",
+  red: "#F85149",
+  orange: "#D29922",
+  tag: "#21262D",
+};
+
+const baseFont = "'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', monospace";
+const sansFont = "'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif";
+
+function thStyle() {
+  return {
+    position: "sticky", top: 0, zIndex: 1,
+    background: palette.surface, padding: "8px 12px",
+    borderBottom: `2px solid ${palette.border}`, textAlign: "left",
+    color: palette.accent, fontWeight: 600,
+  };
+}
+
+function tdStyle(dim) {
+  return {
+    padding: "6px 12px", borderBottom: `1px solid ${palette.border}`,
+    color: dim ? palette.textDim : palette.text, maxWidth: 300,
+    overflow: "hidden", textOverflow: "ellipsis",
+  };
+}
+
+function linkBtnStyle() {
+  return {
+    background: "transparent", border: "none",
+    color: palette.accent, cursor: "pointer", fontSize: 12,
+    fontFamily: sansFont, padding: "2px 4px",
+    textDecoration: "underline", textUnderlineOffset: 2,
+  };
+}
+
+function DatTool() {
+  const [fileName, setFileName] = React.useState(null);
+  const [encoding, setEncoding] = React.useState(null);
+  const [headers, setHeaders] = React.useState([]);
+  const [rows, setRows] = React.useState([]);
+  const [totalRows, setTotalRows] = React.useState(0);
+  const [selected, setSelected] = React.useState(new Set());
+  const [order, setOrder] = React.useState([]);
+  const [dragIdx, setDragIdx] = React.useState(null);
+  const [dragOverIdx, setDragOverIdx] = React.useState(null);
+  const [error, setError] = React.useState(null);
+  const [exported, setExported] = React.useState(false);
+  const [rawBuffer, setRawBuffer] = React.useState(null);
+  const [rawText, setRawText] = React.useState(null);
+  const fileRef = React.useRef();
+
+  const PREVIEW_ROWS = 100;
+
+  React.useEffect(() => {
+    const link = document.createElement("link");
+    link.href = "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap";
+    link.rel = "stylesheet";
+    document.head.appendChild(link);
+  }, []);
+
+  const handleFile = React.useCallback(async (file) => {
+    setError(null);
+    setExported(false);
+    try {
+      const buffer = await file.arrayBuffer();
+      const enc = detectEncoding(buffer);
+      const decoder = new TextDecoder(enc);
+      const text = decoder.decode(buffer);
+      const lines = text.split("\n").filter((l) => l.trim().length > 0);
+      if (lines.length < 1) { setError("File has no rows."); return; }
+      const hdrs = parseRow(lines[0]);
+      const dataLines = lines.slice(1);
+      const preview = dataLines.slice(0, PREVIEW_ROWS).map(parseRow);
+      setFileName(file.name);
+      setEncoding(enc);
+      setHeaders(hdrs);
+      setRows(preview);
+      setTotalRows(dataLines.length);
+      const all = new Set(hdrs.map((_, i) => i));
+      setSelected(all);
+      setOrder(hdrs.map((_, i) => i));
+      setRawBuffer(buffer);
+      setRawText(text);
+    } catch (e) {
+      setError("Failed to parse file: " + e.message);
+    }
+  }, []);
+
+  const onDrop = React.useCallback((e) => {
+    e.preventDefault();
+    const file = e.dataTransfer?.files?.[0];
+    if (file) handleFile(file);
+  }, [handleFile]);
+
+  const toggleColumn = (idx) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+    setExported(false);
+  };
+
+  const selectAll = () => { setSelected(new Set(headers.map((_, i) => i))); setExported(false); };
+  const selectNone = () => { setSelected(new Set()); setExported(false); };
+
+  const onDragStart = (i) => setDragIdx(i);
+  const onDragOver = (e, i) => { e.preventDefault(); setDragOverIdx(i); };
+  const onDragEnd = () => {
+    if (dragIdx !== null && dragOverIdx !== null && dragIdx !== dragOverIdx) {
+      setOrder((prev) => {
+        const next = [...prev];
+        const [moved] = next.splice(dragIdx, 1);
+        next.splice(dragOverIdx, 0, moved);
+        return next;
+      });
+      setExported(false);
+    }
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const doExport = () => {
+    if (!rawText) return;
+    const lines = rawText.split("\n").filter((l) => l.trim().length > 0);
+    const keepIndices = order.filter((i) => selected.has(i));
+    const outLines = lines.map((line) => {
+      const fields = parseRow(line);
+      const kept = keepIndices.map((i) => fields[i] ?? "");
+      return encodeRow(kept);
+    });
+    const outText = outLines.join("\n") + "\n";
+
+    let blob;
+    if (encoding === "utf-16le") {
+      const bom = new Uint8Array([0xFF, 0xFE]);
+      const buf = new ArrayBuffer(outText.length * 2);
+      const view = new DataView(buf);
+      for (let i = 0; i < outText.length; i++) {
+        view.setUint16(i * 2, outText.charCodeAt(i), true);
+      }
+      blob = new Blob([bom, buf], { type: "application/octet-stream" });
+    } else {
+      const encoder = new TextEncoder();
+      let prefix = new Uint8Array(0);
+      if (encoding === "utf-8" && rawBuffer) {
+        const first3 = new Uint8Array(rawBuffer.slice(0, 3));
+        if (first3[0] === 0xEF && first3[1] === 0xBB && first3[2] === 0xBF) {
+          prefix = new Uint8Array([0xEF, 0xBB, 0xBF]);
+        }
+      }
+      blob = new Blob([prefix, encoder.encode(outText)], { type: "application/octet-stream" });
+    }
+
+    const baseName = fileName?.replace(/\.dat$/i, "") ?? "output";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = baseName + "_modified.dat";
+    a.click();
+    URL.revokeObjectURL(url);
+    setExported(true);
+  };
+
+  const activeColumns = order.filter((i) => selected.has(i));
+
+  if (!fileName) {
+    return (
+      <div style={{
+        minHeight: "100vh", background: palette.bg, display: "flex",
+        alignItems: "center", justifyContent: "center", fontFamily: sansFont,
+        flexDirection: "column", gap: 16,
+      }}>
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={onDrop}
+          onClick={() => fileRef.current?.click()}
+          style={{
+            width: 520, padding: "64px 48px", borderRadius: 16,
+            border: `2px dashed ${palette.border}`, background: palette.surface,
+            textAlign: "center", cursor: "pointer",
+            transition: "border-color 0.2s, box-shadow 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = palette.accent;
+            e.currentTarget.style.boxShadow = `0 0 30px ${palette.accentGlow}`;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = palette.border;
+            e.currentTarget.style.boxShadow = "none";
+          }}
+        >
+          <div style={{ fontSize: 48, marginBottom: 16 }}>📂</div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: palette.text, marginBottom: 8 }}>
+            Drop a DAT file here
+          </div>
+          <div style={{ fontSize: 14, color: palette.textDim, lineHeight: 1.6 }}>
+            or click to browse<br />
+            <span style={{ fontFamily: baseFont, fontSize: 12, color: palette.accent }}>
+              Concordance / Relativity format
+            </span>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".dat,.DAT,.txt"
+            style={{ display: "none" }}
+            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+          />
+        </div>
+        {error && (
+          <div style={{ color: palette.red, fontFamily: baseFont, fontSize: 13 }}>
+            {error}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: palette.bg, fontFamily: sansFont,
+      color: palette.text, padding: "24px 32px",
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 16, marginBottom: 24,
+        paddingBottom: 16, borderBottom: `1px solid ${palette.border}`,
+      }}>
+        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.5 }}>
+          DAT Column Manager
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{
+          display: "flex", gap: 12, alignItems: "center",
+          fontFamily: baseFont, fontSize: 12, color: palette.textDim,
+        }}>
+          <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6 }}>{fileName}</span>
+          <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6, color: palette.orange }}>{encoding?.toUpperCase()}</span>
+          <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6 }}>{totalRows.toLocaleString()} rows</span>
+          <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6 }}>{headers.length} cols</span>
+        </div>
+        <button
+          onClick={() => {
+            setFileName(null); setHeaders([]); setRows([]); setRawText(null); setRawBuffer(null);
+            setSelected(new Set()); setOrder([]); setError(null); setExported(false);
+          }}
+          style={{
+            background: "transparent", border: `1px solid ${palette.border}`,
+            color: palette.textDim, padding: "6px 14px", borderRadius: 8,
+            cursor: "pointer", fontFamily: sansFont, fontSize: 13,
+          }}
+        >
+          Open Different File
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+        <div style={{
+          width: 340, flexShrink: 0, background: palette.surface,
+          borderRadius: 12, border: `1px solid ${palette.border}`, overflow: "hidden",
+        }}>
+          <div style={{
+            padding: "14px 16px", borderBottom: `1px solid ${palette.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>
+              Columns
+              <span style={{ marginLeft: 8, fontFamily: baseFont, fontSize: 12, color: palette.accent }}>
+                {activeColumns.length}/{headers.length}
+              </span>
+            </span>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={selectAll} style={linkBtnStyle()}>All</button>
+              <button onClick={selectNone} style={linkBtnStyle()}>None</button>
+            </div>
+          </div>
+          <div style={{ maxHeight: "calc(100vh - 220px)", overflowY: "auto", padding: "6px 0" }}>
+            {order.map((colIdx, i) => (
+              <div
+                key={colIdx}
+                draggable
+                onDragStart={() => onDragStart(i)}
+                onDragOver={(e) => onDragOver(e, i)}
+                onDragEnd={onDragEnd}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "8px 14px", cursor: "grab",
+                  background: dragOverIdx === i ? palette.accentGlow :
+                    dragIdx === i ? palette.surfaceHover : "transparent",
+                  borderLeft: dragOverIdx === i ? `3px solid ${palette.accent}` : "3px solid transparent",
+                  transition: "background 0.1s",
+                  opacity: !selected.has(colIdx) ? 0.4 : 1,
+                }}
+              >
+                <span style={{
+                  fontFamily: baseFont, fontSize: 11, color: palette.textDim,
+                  width: 20, textAlign: "right", flexShrink: 0, userSelect: "none",
+                }}>
+                  {i + 1}
+                </span>
+                <div
+                  onClick={() => toggleColumn(colIdx)}
+                  style={{
+                    width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                    border: `2px solid ${selected.has(colIdx) ? palette.accent : palette.border}`,
+                    background: selected.has(colIdx) ? palette.accent : "transparent",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", transition: "all 0.15s",
+                  }}
+                >
+                  {selected.has(colIdx) && (
+                    <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+                      <path d="M1 4L4 7L10 1" stroke={palette.bg} strokeWidth="2"
+                        strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </div>
+                <span style={{
+                  fontFamily: baseFont, fontSize: 13, fontWeight: 500,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1,
+                }}>
+                  {headers[colIdx]}
+                </span>
+                <svg width="10" height="16" viewBox="0 0 10 16" style={{ flexShrink: 0, opacity: 0.3 }}>
+                  <circle cx="3" cy="3" r="1.5" fill={palette.textDim} />
+                  <circle cx="7" cy="3" r="1.5" fill={palette.textDim} />
+                  <circle cx="3" cy="8" r="1.5" fill={palette.textDim} />
+                  <circle cx="7" cy="8" r="1.5" fill={palette.textDim} />
+                  <circle cx="3" cy="13" r="1.5" fill={palette.textDim} />
+                  <circle cx="7" cy="13" r="1.5" fill={palette.textDim} />
+                </svg>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
+            <button
+              onClick={doExport}
+              disabled={activeColumns.length === 0}
+              style={{
+                background: activeColumns.length > 0 ? palette.accent : palette.border,
+                color: activeColumns.length > 0 ? "#fff" : palette.textDim,
+                border: "none", padding: "10px 24px", borderRadius: 8,
+                fontWeight: 600, fontSize: 14,
+                cursor: activeColumns.length > 0 ? "pointer" : "not-allowed",
+                fontFamily: sansFont, transition: "transform 0.1s",
+              }}
+              onMouseDown={(e) => activeColumns.length > 0 && (e.currentTarget.style.transform = "scale(0.97)")}
+              onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
+            >
+              Export DAT →
+            </button>
+            <span style={{ fontFamily: baseFont, fontSize: 12, color: palette.textDim }}>
+              {activeColumns.length} column{activeColumns.length !== 1 ? "s" : ""} × {totalRows.toLocaleString()} rows
+            </span>
+            {exported && (
+              <span style={{ fontFamily: baseFont, fontSize: 12, color: palette.green, display: "flex", alignItems: "center", gap: 6 }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <circle cx="7" cy="7" r="6" stroke={palette.green} strokeWidth="1.5" />
+                  <path d="M4 7L6 9L10 5" stroke={palette.green} strokeWidth="1.5"
+                    strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Downloaded
+              </span>
+            )}
+          </div>
+
+          <div style={{
+            background: palette.surface, borderRadius: 12,
+            border: `1px solid ${palette.border}`, overflow: "hidden",
+          }}>
+            <div style={{
+              padding: "10px 16px", borderBottom: `1px solid ${palette.border}`,
+              fontFamily: baseFont, fontSize: 12, color: palette.textDim,
+            }}>
+              Preview — first {Math.min(PREVIEW_ROWS, rows.length)} rows
+              {activeColumns.length === 0 && (
+                <span style={{ color: palette.orange, marginLeft: 12 }}>Select at least one column</span>
+              )}
+            </div>
+            <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 240px)" }}>
+              {activeColumns.length > 0 && (
+                <table style={{
+                  borderCollapse: "collapse", fontFamily: baseFont,
+                  fontSize: 12, whiteSpace: "nowrap", width: "100%",
+                }}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle()}>#</th>
+                      {activeColumns.map((ci) => (
+                        <th key={ci} style={thStyle()}>{headers[ci]}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, ri) => (
+                      <tr key={ri}>
+                        <td style={tdStyle(true)}>{ri + 1}</td>
+                        {activeColumns.map((ci) => (
+                          <td key={ci} style={tdStyle(false)}>
+                            {truncate(row[ci] ?? "", 80)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<DatTool />);
+
+  </script>
+</body>
+</html>
