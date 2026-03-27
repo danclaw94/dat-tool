@@ -7,7 +7,6 @@
   <link rel="icon" type="image/png" href="favicon.png" />
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #0E1117; }
@@ -19,13 +18,9 @@
 </head>
 <body>
   <div id="root"></div>
-  <script type="text/babel" data-presets="env,react">
-
-const APP_VERSION = 'v2.0.0 · 2026-03-27';
-
+  <script>const APP_VERSION = 'v2.1.0 · 2026-03-27';
 const DELIMITER = "\x14";
 const QUOTE = "\xFE";
-
 function detectEncoding(buffer) {
   const bytes = new Uint8Array(buffer.slice(0, 4));
   if (bytes[0] === 0xFF && bytes[1] === 0xFE) return "utf-16le";
@@ -40,13 +35,22 @@ function detectEncoding(buffer) {
   let i = 0;
   while (i < sample.length) {
     const b = sample[i];
-    if (b < 0x80) { i++; continue; }
+    if (b < 0x80) {
+      i++;
+      continue;
+    }
     hasHighBytes = true;
     // Check valid UTF-8 multi-byte sequence
     let seqLen = b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : b >= 0xC0 ? 2 : 0;
-    if (seqLen === 0) { invalidUtf8 = true; break; }
+    if (seqLen === 0) {
+      invalidUtf8 = true;
+      break;
+    }
     for (let j = 1; j < seqLen; j++) {
-      if (i + j >= sample.length || (sample[i + j] & 0xC0) !== 0x80) { invalidUtf8 = true; break; }
+      if (i + j >= sample.length || (sample[i + j] & 0xC0) !== 0x80) {
+        invalidUtf8 = true;
+        break;
+      }
     }
     if (invalidUtf8) break;
     i += seqLen;
@@ -54,7 +58,6 @@ function detectEncoding(buffer) {
   if (hasHighBytes && invalidUtf8) return "windows-1252";
   return "utf-8";
 }
-
 function parseRow(line) {
   const sep = QUOTE + DELIMITER + QUOTE;
   // Strip line endings FIRST, then strip the single enclosing quote on each end.
@@ -66,17 +69,14 @@ function parseRow(line) {
   if (trimmed.endsWith(QUOTE)) trimmed = trimmed.slice(0, -1);
   return trimmed.split(sep);
 }
-
 function encodeRow(fields) {
   return QUOTE + fields.join(QUOTE + DELIMITER + QUOTE) + QUOTE;
 }
-
 function truncate(s, n) {
   if (!s) return "";
   const cleaned = s.replace(/[\x00-\x1F]/g, " ").trim();
   return cleaned.length > n ? cleaned.slice(0, n) + "…" : cleaned;
 }
-
 const palette = {
   bg: "#0E1117",
   surface: "#161B22",
@@ -90,58 +90,78 @@ const palette = {
   green: "#3FB950",
   red: "#F85149",
   orange: "#D29922",
-  tag: "#21262D",
+  tag: "#21262D"
 };
-
 const baseFont = "'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', monospace";
 const sansFont = "'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif";
-
 function thStyle() {
   return {
-    position: "sticky", top: 0, zIndex: 1,
-    background: palette.surface, padding: "8px 12px",
-    borderBottom: "2px solid " + (palette.border), textAlign: "left",
-    color: palette.accent, fontWeight: 600,
+    position: "sticky",
+    top: 0,
+    zIndex: 1,
+    background: palette.surface,
+    padding: "8px 12px",
+    borderBottom: "2px solid " + palette.border,
+    textAlign: "left",
+    color: palette.accent,
+    fontWeight: 600
   };
 }
-
 function tdStyle(dim) {
   return {
-    padding: "6px 12px", borderBottom: "1px solid " + (palette.border),
-    color: dim ? palette.textDim : palette.text, maxWidth: 300,
-    overflow: "hidden", textOverflow: "ellipsis",
+    padding: "6px 12px",
+    borderBottom: "1px solid " + palette.border,
+    color: dim ? palette.textDim : palette.text,
+    maxWidth: 300,
+    overflow: "hidden",
+    textOverflow: "ellipsis"
   };
 }
-
 function linkBtnStyle() {
   return {
-    background: "transparent", border: "none",
-    color: palette.accent, cursor: "pointer", fontSize: 12,
-    fontFamily: sansFont, padding: "2px 4px",
-    textDecoration: "underline", textUnderlineOffset: 2,
+    background: "transparent",
+    border: "none",
+    color: palette.accent,
+    cursor: "pointer",
+    fontSize: 12,
+    fontFamily: sansFont,
+    padding: "2px 4px",
+    textDecoration: "underline",
+    textUnderlineOffset: 2
   };
 }
-
-function FnrButton({ colIdx, sourceMap, transforms, openFnr, accentColor, dimColor }) {
+function FnrButton({
+  colIdx,
+  sourceMap,
+  transforms,
+  openFnr,
+  accentColor,
+  dimColor
+}) {
   const srcIdx = sourceMap[colIdx] ?? colIdx;
-  const hasTransform = !!(transforms[srcIdx]?.length);
-  return (
-    <button
-      title={hasTransform ? 'Find & Replace active — click to edit' : 'Find & Replace in this column'}
-      onClick={e => { e.stopPropagation(); openFnr(colIdx); }}
-      style={{
-        background: hasTransform ? accentColor + '22' : 'transparent',
-        border: hasTransform ? "1px solid " + (accentColor) + "55" : 'none',
-        cursor: 'pointer', color: hasTransform ? accentColor : dimColor,
-        padding: '0 4px', flexShrink: 0, fontSize: 12, lineHeight: 1,
-        borderRadius: 3, opacity: hasTransform ? 1 : 0.5,
-      }}
-      onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-      onMouseLeave={e => e.currentTarget.style.opacity = hasTransform ? '1' : '0.5'}
-    >✎</button>
-  );
+  const hasTransform = !!transforms[srcIdx]?.length;
+  return /*#__PURE__*/React.createElement("button", {
+    title: hasTransform ? 'Find & Replace active — click to edit' : 'Find & Replace in this column',
+    onClick: e => {
+      e.stopPropagation();
+      openFnr(colIdx);
+    },
+    style: {
+      background: hasTransform ? accentColor + '22' : 'transparent',
+      border: hasTransform ? "1px solid " + accentColor + "55" : 'none',
+      cursor: 'pointer',
+      color: hasTransform ? accentColor : dimColor,
+      padding: '0 4px',
+      flexShrink: 0,
+      fontSize: 12,
+      lineHeight: 1,
+      borderRadius: 3,
+      opacity: hasTransform ? 1 : 0.5
+    },
+    onMouseEnter: e => e.currentTarget.style.opacity = '1',
+    onMouseLeave: e => e.currentTarget.style.opacity = hasTransform ? '1' : '0.5'
+  }, "\u270E");
 }
-
 function DatTool() {
   const [fileName, setFileName] = React.useState(null);
   const [encoding, setEncoding] = React.useState(null);
@@ -174,9 +194,7 @@ function DatTool() {
   const [sourceMap, setSourceMap] = React.useState({});
   const fileRef = React.useRef();
   const renameInputRef = React.useRef();
-
   const PREVIEW_ROWS = 100;
-
   React.useEffect(() => {
     const link = document.createElement("link");
     link.href = "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap";
@@ -198,12 +216,14 @@ function DatTool() {
   const [pendingRestore, setPendingRestore] = React.useState(() => {
     try {
       const saved = sessionStorage.getItem('dat-pending-restore');
-      if (saved) { sessionStorage.removeItem('dat-pending-restore'); return JSON.parse(saved); }
+      if (saved) {
+        sessionStorage.removeItem('dat-pending-restore');
+        return JSON.parse(saved);
+      }
     } catch {}
     return null;
   });
-
-  const handleFile = React.useCallback(async (file) => {
+  const handleFile = React.useCallback(async file => {
     setError(null);
     setExported(false);
     try {
@@ -211,8 +231,11 @@ function DatTool() {
       const enc = detectEncoding(buffer);
       const decoder = new TextDecoder(enc);
       const text = decoder.decode(buffer);
-      const lines = text.split("\n").filter((l) => l.trim().length > 0);
-      if (lines.length < 1) { setError("File has no rows."); return; }
+      const lines = text.split("\n").filter(l => l.trim().length > 0);
+      if (lines.length < 1) {
+        setError("File has no rows.");
+        return;
+      }
       const hdrs = parseRow(lines[0]);
       const dataLines = lines.slice(1);
       const preview = dataLines.slice(0, PREVIEW_ROWS).map(parseRow);
@@ -251,57 +274,71 @@ function DatTool() {
       setError("Failed to parse file: " + e.message);
     }
   }, [pendingRestore]);
-
-  const onDrop = React.useCallback((e) => {
+  const onDrop = React.useCallback(e => {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (file) handleFile(file);
   }, [handleFile]);
-
-  const toggleColumn = (idx) => {
-    setSelected((prev) => {
+  const toggleColumn = idx => {
+    setSelected(prev => {
       const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
+      if (next.has(idx)) next.delete(idx);else next.add(idx);
       return next;
     });
     setExported(false);
   };
-
-  const selectAll = () => { setSelected(new Set(headers.map((_, i) => i))); setExported(false); };
-  const selectNone = () => { setSelected(new Set()); setExported(false); };
+  const selectAll = () => {
+    setSelected(new Set(headers.map((_, i) => i)));
+    setExported(false);
+  };
+  const selectNone = () => {
+    setSelected(new Set());
+    setExported(false);
+  };
 
   // Returns the display name for a column slot
-  const colName = (colIdx) => renames[colIdx] ?? headers[colIdx] ?? '';
+  const colName = colIdx => renames[colIdx] ?? headers[colIdx] ?? '';
 
   // Duplicate column: add synthetic slot pointing at same source data
   const duplicateColumn = (colIdx, orderPos) => {
-    const srcIdx = sourceMap[colIdx] ?? colIdx;  // always point at original source
+    const srcIdx = sourceMap[colIdx] ?? colIdx; // always point at original source
     const newIdx = headers.length;
     const baseName = colName(colIdx);
-    setHeaders(prev => [...prev, prev[srcIdx]]);  // placeholder — not used for name
-    setSourceMap(prev => ({ ...prev, [newIdx]: srcIdx }));
-    setRenames(prev => ({ ...prev, [newIdx]: baseName + ' (copy)' }));
+    setHeaders(prev => [...prev, prev[srcIdx]]); // placeholder — not used for name
+    setSourceMap(prev => ({
+      ...prev,
+      [newIdx]: srcIdx
+    }));
+    setRenames(prev => ({
+      ...prev,
+      [newIdx]: baseName + ' (copy)'
+    }));
     setOrder(prev => {
       const next = [...prev];
       next.splice(orderPos + 1, 0, newIdx);
       return next;
     });
-    setSelected(prev => { const s = new Set(prev); s.add(newIdx); return s; });
+    setSelected(prev => {
+      const s = new Set(prev);
+      s.add(newIdx);
+      return s;
+    });
     setExported(false);
   };
 
   // Start inline rename
-  const startRename = (colIdx) => {
+  const startRename = colIdx => {
     setEditingCol(colIdx);
     setEditingVal(colName(colIdx));
     setTimeout(() => renameInputRef.current?.select(), 30);
   };
-
   const commitRename = () => {
     if (editingCol !== null) {
       const val = editingVal.trim();
-      setRenames(prev => ({ ...prev, [editingCol]: val || colName(editingCol) }));
+      setRenames(prev => ({
+        ...prev,
+        [editingCol]: val || colName(editingCol)
+      }));
     }
     setEditingCol(null);
   };
@@ -337,12 +374,14 @@ function DatTool() {
         const result = re ? val.replace(re, replace) : val.split(find).join(replace);
         if (result !== val) count++;
       }
-    } catch { return null; }
+    } catch {
+      return null;
+    }
     return count;
   };
 
   // Open F&R panel for a column, pre-populating existing first rule if any
-  const openFnr = (colIdx) => {
+  const openFnr = colIdx => {
     const srcIdx = sourceMap[colIdx] ?? colIdx;
     const existing = transforms[srcIdx]?.[0];
     setFnrFind(existing?.find ?? '');
@@ -351,29 +390,50 @@ function DatTool() {
     setFnrError(null);
     setFnrPanel(colIdx);
   };
-
   const applyFnr = () => {
-    if (!fnrFind) { setFnrPanel(null); return; }
+    if (!fnrFind) {
+      setFnrPanel(null);
+      return;
+    }
     if (fnrRegex) {
-      try { new RegExp(fnrFind); } catch (e) { setFnrError('Invalid regex: ' + e.message); return; }
+      try {
+        new RegExp(fnrFind);
+      } catch (e) {
+        setFnrError('Invalid regex: ' + e.message);
+        return;
+      }
     }
     const srcIdx = sourceMap[fnrPanel] ?? fnrPanel;
-    setTransforms(prev => ({ ...prev, [srcIdx]: [{ find: fnrFind, replace: fnrReplace, useRegex: fnrRegex }] }));
+    setTransforms(prev => ({
+      ...prev,
+      [srcIdx]: [{
+        find: fnrFind,
+        replace: fnrReplace,
+        useRegex: fnrRegex
+      }]
+    }));
     setFnrPanel(null);
     setExported(false);
   };
-
-  const clearFnr = (colIdx) => {
+  const clearFnr = colIdx => {
     const srcIdx = sourceMap[colIdx] ?? colIdx;
-    setTransforms(prev => { const n = { ...prev }; delete n[srcIdx]; return n; });
+    setTransforms(prev => {
+      const n = {
+        ...prev
+      };
+      delete n[srcIdx];
+      return n;
+    });
     setExported(false);
   };
-
-  const onDragStart = (i) => setDragIdx(i);
-  const onDragOver = (e, i) => { e.preventDefault(); setDragOverIdx(i); };
+  const onDragStart = i => setDragIdx(i);
+  const onDragOver = (e, i) => {
+    e.preventDefault();
+    setDragOverIdx(i);
+  };
   const onDragEnd = () => {
     if (dragIdx !== null && dragOverIdx !== null && dragIdx !== dragOverIdx) {
-      setOrder((prev) => {
+      setOrder(prev => {
         const next = [...prev];
         const [moved] = next.splice(dragIdx, 1);
         next.splice(dragOverIdx, 0, moved);
@@ -384,52 +444,81 @@ function DatTool() {
     setDragIdx(null);
     setDragOverIdx(null);
   };
-
   const doExport = () => {
     if (!rawText) return;
-    const lines = rawText.split("\n").filter((l) => l.trim().length > 0);
-    const keepSlots = order.filter((i) => selected.has(i));
+    const lines = rawText.split("\n").filter(l => l.trim().length > 0);
+    const keepSlots = order.filter(i => selected.has(i));
     // For each slot: which source column index to read data from
     const keepSourceIndices = keepSlots.map(i => sourceMap[i] ?? i);
     // Header row uses renamed names
     const headerRow = encodeRow(keepSlots.map(i => colName(i)));
-    const dataLines = lines.slice(1).map((line) => {
+    const dataLines = lines.slice(1).map(line => {
       const fields = parseRow(line);
-      const kept = keepSourceIndices.map((i) => applyTransforms(i, fields[i] ?? ""));
+      const kept = keepSourceIndices.map(i => applyTransforms(i, fields[i] ?? ""));
       return encodeRow(kept);
     });
     const outLines = [headerRow, ...dataLines];
     const outText = outLines.join("\n") + "\n";
-
     let blob;
     if (encoding === "utf-16le") {
       const bom = new Uint8Array([0xFF, 0xFE]);
       const buf = new ArrayBuffer(outText.length * 2);
       const view = new DataView(buf);
       for (let i = 0; i < outText.length; i++) view.setUint16(i * 2, outText.charCodeAt(i), true);
-      blob = new Blob([bom, buf], { type: "application/octet-stream" });
+      blob = new Blob([bom, buf], {
+        type: "application/octet-stream"
+      });
     } else if (encoding === "utf-16be") {
       const bom = new Uint8Array([0xFE, 0xFF]);
       const buf = new ArrayBuffer(outText.length * 2);
       const view = new DataView(buf);
       for (let i = 0; i < outText.length; i++) view.setUint16(i * 2, outText.charCodeAt(i), false);
-      blob = new Blob([bom, buf], { type: "application/octet-stream" });
+      blob = new Blob([bom, buf], {
+        type: "application/octet-stream"
+      });
     } else if (encoding === "windows-1252") {
       // Re-encode as Windows-1252: use TextEncoder fallback via a lossy approach.
       // Since the original was decoded via TextDecoder("windows-1252"), the JS string
       // has correct Unicode codepoints. We need to map back to 1252 bytes.
       // The safest way: encode via a hidden TextDecoder with fatal mode isn't available for
       // encoding, so we use a lookup table for the 0x80–0x9F block (the rest map 1:1 to Unicode).
-      const W1252_MAP = {0x20AC:0x80,0x201A:0x82,0x0192:0x83,0x201E:0x84,0x2026:0x85,0x2020:0x86,
-        0x2021:0x87,0x02C6:0x88,0x2030:0x89,0x0160:0x8A,0x2039:0x8B,0x0152:0x8C,0x017D:0x8E,
-        0x2018:0x91,0x2019:0x92,0x201C:0x93,0x201D:0x94,0x2022:0x95,0x2013:0x96,0x2014:0x97,
-        0x02DC:0x98,0x2122:0x99,0x0161:0x9A,0x203A:0x9B,0x0153:0x9C,0x017E:0x9E,0x0178:0x9F};
+      const W1252_MAP = {
+        0x20AC: 0x80,
+        0x201A: 0x82,
+        0x0192: 0x83,
+        0x201E: 0x84,
+        0x2026: 0x85,
+        0x2020: 0x86,
+        0x2021: 0x87,
+        0x02C6: 0x88,
+        0x2030: 0x89,
+        0x0160: 0x8A,
+        0x2039: 0x8B,
+        0x0152: 0x8C,
+        0x017D: 0x8E,
+        0x2018: 0x91,
+        0x2019: 0x92,
+        0x201C: 0x93,
+        0x201D: 0x94,
+        0x2022: 0x95,
+        0x2013: 0x96,
+        0x2014: 0x97,
+        0x02DC: 0x98,
+        0x2122: 0x99,
+        0x0161: 0x9A,
+        0x203A: 0x9B,
+        0x0153: 0x9C,
+        0x017E: 0x9E,
+        0x0178: 0x9F
+      };
       const bytes = new Uint8Array(outText.length);
       for (let i = 0; i < outText.length; i++) {
         const cp = outText.charCodeAt(i);
         bytes[i] = W1252_MAP[cp] ?? (cp <= 0xFF ? cp : 0x3F); // 0x3F = '?' for unmappable chars
       }
-      blob = new Blob([bytes], { type: "application/octet-stream" });
+      blob = new Blob([bytes], {
+        type: "application/octet-stream"
+      });
     } else {
       const encoder = new TextEncoder();
       let prefix = new Uint8Array(0);
@@ -439,9 +528,10 @@ function DatTool() {
           prefix = new Uint8Array([0xEF, 0xBB, 0xBF]);
         }
       }
-      blob = new Blob([prefix, encoder.encode(outText)], { type: "application/octet-stream" });
+      blob = new Blob([prefix, encoder.encode(outText)], {
+        type: "application/octet-stream"
+      });
     }
-
     const baseName = fileName?.replace(/\.dat$/i, "") ?? "output";
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -451,483 +541,834 @@ function DatTool() {
     URL.revokeObjectURL(url);
     setExported(true);
   };
-
-  const activeColumns = order.filter((i) => selected.has(i));
+  const activeColumns = order.filter(i => selected.has(i));
 
   // FNR panel — computed outside JSX to avoid IIFE-in-JSX Babel issues
-  const fnrSrcIdx = fnrPanel !== null ? (sourceMap[fnrPanel] ?? fnrPanel) : null;
-  const fnrMatchCount = (fnrPanel !== null && fnrFind) ? previewCount(fnrSrcIdx, fnrFind, fnrReplace, fnrRegex) : null;
-
+  const fnrSrcIdx = fnrPanel !== null ? sourceMap[fnrPanel] ?? fnrPanel : null;
+  const fnrMatchCount = fnrPanel !== null && fnrFind ? previewCount(fnrSrcIdx, fnrFind, fnrReplace, fnrRegex) : null;
   if (!fileName) {
-    return (
-      <div style={{
-        minHeight: "100vh", background: palette.bg, display: "flex",
-        alignItems: "center", justifyContent: "center", fontFamily: sansFont,
-        flexDirection: "column", gap: 16,
-      }}>
-        <div
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={onDrop}
-          onClick={() => fileRef.current?.click()}
-          style={{
-            width: 520, padding: "64px 48px", borderRadius: 16,
-            border: "2px dashed " + (palette.border), background: palette.surface,
-            textAlign: "center", cursor: "pointer",
-            transition: "border-color 0.2s, box-shadow 0.2s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = palette.accent;
-            e.currentTarget.style.boxShadow = "0 0 30px " + (palette.accentGlow);
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = palette.border;
-            e.currentTarget.style.boxShadow = "none";
-          }}
-        >
-          <a href="https://vdiscovery.com" target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ display: 'inline-block', lineHeight: 0, marginBottom: 20 }}>
-            <img src="vdiscovery-white.png" alt="vDiscovery" style={{ height: 64, objectFit: 'contain' }} />
-          </a>
-          {pendingRestore ? (
-            <>
-              <div style={{ fontSize: 18, fontWeight: 600, color: palette.accent, marginBottom: 8 }}>
-                ↻ Version refreshed!
-              </div>
-              <div style={{ fontSize: 14, color: palette.textDim, lineHeight: 1.6 }}>
-                Re-open <span style={{ color: palette.text, fontFamily: baseFont }}>{pendingRestore.fileName}</span><br />
-                to restore your column layout
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 20, fontWeight: 600, color: palette.text, marginBottom: 8 }}>
-                DAT Column Manager
-              </div>
-              <div style={{ fontSize: 14, color: palette.textDim, lineHeight: 1.6, marginBottom: 4 }}>
-                Drop a .dat file here or click to browse
-              </div>
-              <div style={{ fontFamily: baseFont, fontSize: 12, color: palette.accent }}>
-                Concordance / Relativity format
-              </div>
-            </>
-          )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".dat,.DAT,.txt"
-            style={{ display: "none" }}
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-          />
-        </div>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 6,
-          fontFamily: baseFont, fontSize: 11, color: palette.green,
-          background: "rgba(63,185,80,0.08)", border: "1px solid rgba(63,185,80,0.2)",
-          padding: "8px 16px", borderRadius: 8, marginTop: 8,
-        }}>
-          <svg width="11" height="13" viewBox="0 0 11 13" fill="none">
-            <rect x="1" y="5" width="9" height="7" rx="1.5" stroke={palette.green} strokeWidth="1.4"/>
-            <path d="M3 5V3.5a2.5 2.5 0 015 0V5" stroke={palette.green} strokeWidth="1.4" strokeLinecap="round"/>
-          </svg>
-          100% local processing — your file never leaves this browser tab
-        </div>
-        {error && (
-          <div style={{ color: palette.red, fontFamily: baseFont, fontSize: 13 }}>
-            {error}
-          </div>
-        )}
-      </div>
-    );
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        minHeight: "100vh",
+        background: palette.bg,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: sansFont,
+        flexDirection: "column",
+        gap: 16
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      onDragOver: e => e.preventDefault(),
+      onDrop: onDrop,
+      onClick: () => fileRef.current?.click(),
+      style: {
+        width: 520,
+        padding: "64px 48px",
+        borderRadius: 16,
+        border: "2px dashed " + palette.border,
+        background: palette.surface,
+        textAlign: "center",
+        cursor: "pointer",
+        transition: "border-color 0.2s, box-shadow 0.2s"
+      },
+      onMouseEnter: e => {
+        e.currentTarget.style.borderColor = palette.accent;
+        e.currentTarget.style.boxShadow = "0 0 30px " + palette.accentGlow;
+      },
+      onMouseLeave: e => {
+        e.currentTarget.style.borderColor = palette.border;
+        e.currentTarget.style.boxShadow = "none";
+      }
+    }, /*#__PURE__*/React.createElement("a", {
+      href: "https://vdiscovery.com",
+      target: "_blank",
+      rel: "noopener noreferrer",
+      onClick: e => e.stopPropagation(),
+      style: {
+        display: 'inline-block',
+        lineHeight: 0,
+        marginBottom: 20
+      }
+    }, /*#__PURE__*/React.createElement("img", {
+      src: "vdiscovery-white.png",
+      alt: "vDiscovery",
+      style: {
+        height: 64,
+        objectFit: 'contain'
+      }
+    })), pendingRestore ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 18,
+        fontWeight: 600,
+        color: palette.accent,
+        marginBottom: 8
+      }
+    }, "\u21BB Version refreshed!"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 14,
+        color: palette.textDim,
+        lineHeight: 1.6
+      }
+    }, "Re-open ", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: palette.text,
+        fontFamily: baseFont
+      }
+    }, pendingRestore.fileName), /*#__PURE__*/React.createElement("br", null), "to restore your column layout")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 20,
+        fontWeight: 600,
+        color: palette.text,
+        marginBottom: 8
+      }
+    }, "DAT Column Manager"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 14,
+        color: palette.textDim,
+        lineHeight: 1.6,
+        marginBottom: 4
+      }
+    }, "Drop a .dat file here or click to browse"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: baseFont,
+        fontSize: 12,
+        color: palette.accent
+      }
+    }, "Concordance / Relativity format")), /*#__PURE__*/React.createElement("input", {
+      ref: fileRef,
+      type: "file",
+      accept: ".dat,.DAT,.txt",
+      style: {
+        display: "none"
+      },
+      onChange: e => e.target.files?.[0] && handleFile(e.target.files[0])
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        fontFamily: baseFont,
+        fontSize: 11,
+        color: palette.green,
+        background: "rgba(63,185,80,0.08)",
+        border: "1px solid rgba(63,185,80,0.2)",
+        padding: "8px 16px",
+        borderRadius: 8,
+        marginTop: 8
+      }
+    }, /*#__PURE__*/React.createElement("svg", {
+      width: "11",
+      height: "13",
+      viewBox: "0 0 11 13",
+      fill: "none"
+    }, /*#__PURE__*/React.createElement("rect", {
+      x: "1",
+      y: "5",
+      width: "9",
+      height: "7",
+      rx: "1.5",
+      stroke: palette.green,
+      strokeWidth: "1.4"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M3 5V3.5a2.5 2.5 0 015 0V5",
+      stroke: palette.green,
+      strokeWidth: "1.4",
+      strokeLinecap: "round"
+    })), "100% local processing \u2014 your file never leaves this browser tab"), error && /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: palette.red,
+        fontFamily: baseFont,
+        fontSize: 13
+      }
+    }, error));
   }
-
-  return (
-    <div style={{
-      minHeight: "100vh", background: palette.bg, fontFamily: sansFont,
-      color: palette.text, padding: "24px 32px",
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 16, marginBottom: 24,
-        paddingBottom: 16, borderBottom: "1px solid " + (palette.border),
-      }}>
-        <a href="https://vdiscovery.com" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', lineHeight: 0, flexShrink: 0 }}>
-          <img src="v-outline.png" alt="vDiscovery" style={{ height: 28, objectFit: 'contain' }} />
-        </a>
-        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.5 }}>
-          DAT Column Manager
-        </div>
-        <div style={{ flex: 1 }} />
-        <div style={{
-          display: "flex", alignItems: "center", gap: 6,
-          fontFamily: baseFont, fontSize: 11, color: palette.green,
-          background: "rgba(63,185,80,0.1)", border: "1px solid rgba(63,185,80,0.25)",
-          padding: "4px 10px", borderRadius: 6,
-        }}>
-          <svg width="11" height="13" viewBox="0 0 11 13" fill="none">
-            <rect x="1" y="5" width="9" height="7" rx="1.5" stroke={palette.green} strokeWidth="1.4"/>
-            <path d="M3 5V3.5a2.5 2.5 0 015 0V5" stroke={palette.green} strokeWidth="1.4" strokeLinecap="round"/>
-          </svg>
-          100% local — no data leaves your browser
-        </div>
-        <div style={{
-          display: "flex", gap: 12, alignItems: "center",
-          fontFamily: baseFont, fontSize: 12, color: palette.textDim,
-        }}>
-          <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6 }}>{fileName}</span>
-          <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6, color: palette.orange }}>{encoding?.toUpperCase()}</span>
-          <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6 }}>{totalRows.toLocaleString()} rows</span>
-          <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6 }}>{originalColCount} cols</span>
-        </div>
-        <button
-          onClick={() => {
-            setFileName(null); setHeaders([]); setRows([]); setRawText(null); setRawBuffer(null);
-            setSelected(new Set()); setOrder([]); setError(null); setExported(false);
-            setRenames({}); setSourceMap({}); setEditingCol(null); setOriginalColCount(0); setTransforms({}); setFnrPanel(null);
-          }}
-          style={{
-            background: "transparent", border: "1px solid " + (palette.border),
-            color: palette.textDim, padding: "6px 14px", borderRadius: 8,
-            cursor: "pointer", fontFamily: sansFont, fontSize: 13,
-          }}
-        >
-          Open Different File
-        </button>
-        <button
-          title="Reload page to get latest version — your column layout will be saved and restored"
-          onClick={() => {
-            try {
-              sessionStorage.setItem('dat-pending-restore', JSON.stringify({
-                fileName,
-                order,
-                selected: [...selected],
-                renames,
-                sourceMap,
-                transforms,
-              }));
-            } catch {}
-            const url = new URL(window.location.href);
-            url.searchParams.set('_cb', Date.now());
-            window.location.replace(url.toString());
-          }}
-          style={{
-            background: "transparent", border: "1px solid " + (palette.border),
-            color: palette.textDim, padding: "6px 10px", borderRadius: 8,
-            cursor: "pointer", fontFamily: sansFont, fontSize: 12,
-            title: "Refresh to latest version",
-          }}
-        >
-          ↻
-        </button>
-      </div>
-
-      <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-        <div style={{
-          width: 340, flexShrink: 0, background: palette.surface,
-          borderRadius: 12, border: "1px solid " + (palette.border), overflow: "hidden",
-        }}>
-          <div style={{
-            padding: "14px 16px", borderBottom: "1px solid " + (palette.border),
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-          }}>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>
-              Columns
-              <span style={{ marginLeft: 8, fontFamily: baseFont, fontSize: 12, color: palette.accent }}>
-                {activeColumns.length}/{headers.length}
-              </span>
-            </span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={selectAll} style={linkBtnStyle()}>All</button>
-              <button onClick={selectNone} style={linkBtnStyle()}>None</button>
-            </div>
-          </div>
-          <div style={{ maxHeight: "calc(100vh - 220px)", overflowY: "auto", padding: "6px 0" }}>
-            {order.map((colIdx, i) => (
-              <div
-                key={colIdx}
-                draggable
-                onDragStart={() => onDragStart(i)}
-                onDragOver={(e) => onDragOver(e, i)}
-                onDragEnd={onDragEnd}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "8px 14px", cursor: "grab",
-                  background: dragOverIdx === i ? palette.accentGlow :
-                    dragIdx === i ? palette.surfaceHover : "transparent",
-                  borderLeft: dragOverIdx === i ? "3px solid " + (palette.accent) : "3px solid transparent",
-                  transition: "background 0.1s",
-                  opacity: !selected.has(colIdx) ? 0.4 : 1,
-                }}
-              >
-                <span style={{
-                  fontFamily: baseFont, fontSize: 11, color: palette.textDim,
-                  width: 20, textAlign: "right", flexShrink: 0, userSelect: "none",
-                }}>
-                  {i + 1}
-                </span>
-                <div
-                  onClick={() => toggleColumn(colIdx)}
-                  style={{
-                    width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-                    border: "2px solid " + (selected.has(colIdx) ? palette.accent : palette.border),
-                    background: selected.has(colIdx) ? palette.accent : "transparent",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "pointer", transition: "all 0.15s",
-                  }}
-                >
-                  {selected.has(colIdx) && (
-                    <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
-                      <path d="M1 4L4 7L10 1" stroke={palette.bg} strokeWidth="2"
-                        strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </div>
-                {editingCol === colIdx ? (
-                  <input
-                    ref={renameInputRef}
-                    value={editingVal}
-                    onChange={e => setEditingVal(e.target.value)}
-                    onBlur={commitRename}
-                    onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setEditingCol(null); }}
-                    style={{
-                      flex: 1, fontFamily: baseFont, fontSize: 13, fontWeight: 500,
-                      background: palette.bg, border: "1px solid " + (palette.accent),
-                      color: palette.text, borderRadius: 4, padding: '2px 6px', outline: 'none',
-                    }}
-                    onClick={e => e.stopPropagation()}
-                  />
-                ) : (
-                  <span
-                    title="Click to rename"
-                    onClick={e => { e.stopPropagation(); startRename(colIdx); }}
-                    style={{
-                      fontFamily: baseFont, fontSize: 13, fontWeight: 500,
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1,
-                      cursor: 'text',
-                      color: renames[colIdx] ? palette.accent : palette.text,
-                    }}
-                  >
-                    {colName(colIdx)}
-                  </span>
-                )}
-                {/* Find & Replace button */}
-                <FnrButton
-                  colIdx={colIdx}
-                  sourceMap={sourceMap}
-                  transforms={transforms}
-                  openFnr={openFnr}
-                  accentColor={palette.accent}
-                  dimColor={palette.textDim}
-                />
-                {/* Duplicate button */}
-                <button
-                  title="Duplicate column"
-                  onClick={e => { e.stopPropagation(); duplicateColumn(colIdx, i); }}
-                  style={{
-                    background: 'transparent', border: 'none', cursor: 'pointer',
-                    color: palette.textDim, padding: '0 3px', flexShrink: 0,
-                    fontSize: 14, lineHeight: 1, opacity: 0.5,
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-                  onMouseLeave={e => e.currentTarget.style.opacity = '0.5'}
-                >⊕</button>
-                <svg width="10" height="16" viewBox="0 0 10 16" style={{ flexShrink: 0, opacity: 0.3 }}>
-                  <circle cx="3" cy="3" r="1.5" fill={palette.textDim} />
-                  <circle cx="7" cy="3" r="1.5" fill={palette.textDim} />
-                  <circle cx="3" cy="8" r="1.5" fill={palette.textDim} />
-                  <circle cx="7" cy="8" r="1.5" fill={palette.textDim} />
-                  <circle cx="3" cy="13" r="1.5" fill={palette.textDim} />
-                  <circle cx="7" cy="13" r="1.5" fill={palette.textDim} />
-                </svg>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
-            <button
-              onClick={doExport}
-              disabled={activeColumns.length === 0}
-              style={{
-                background: activeColumns.length > 0 ? palette.accent : palette.border,
-                color: activeColumns.length > 0 ? "#fff" : palette.textDim,
-                border: "none", padding: "10px 24px", borderRadius: 8,
-                fontWeight: 600, fontSize: 14,
-                cursor: activeColumns.length > 0 ? "pointer" : "not-allowed",
-                fontFamily: sansFont, transition: "transform 0.1s",
-              }}
-              onMouseDown={(e) => activeColumns.length > 0 && (e.currentTarget.style.transform = "scale(0.97)")}
-              onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
-            >
-              Export DAT →
-            </button>
-            <span style={{ fontFamily: baseFont, fontSize: 12, color: palette.textDim }}>
-              {activeColumns.length} column{activeColumns.length !== 1 ? "s" : ""} × {totalRows.toLocaleString()} rows
-            </span>
-            {exported && (
-              <span style={{ fontFamily: baseFont, fontSize: 12, color: palette.green, display: "flex", alignItems: "center", gap: 6 }}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <circle cx="7" cy="7" r="6" stroke={palette.green} strokeWidth="1.5" />
-                  <path d="M4 7L6 9L10 5" stroke={palette.green} strokeWidth="1.5"
-                    strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                Downloaded
-              </span>
-            )}
-          </div>
-
-          <div style={{
-            background: palette.surface, borderRadius: 12,
-            border: "1px solid " + (palette.border), overflow: "hidden",
-          }}>
-            <div style={{
-              padding: "10px 16px", borderBottom: "1px solid " + (palette.border),
-              fontFamily: baseFont, fontSize: 12, color: palette.textDim,
-            }}>
-              Preview — first {Math.min(PREVIEW_ROWS, rows.length)} rows
-              {activeColumns.length === 0 && (
-                <span style={{ color: palette.orange, marginLeft: 12 }}>Select at least one column</span>
-              )}
-            </div>
-            <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 240px)" }}>
-              {activeColumns.length > 0 && (
-                <table style={{
-                  borderCollapse: "collapse", fontFamily: baseFont,
-                  fontSize: 12, whiteSpace: "nowrap", width: "100%",
-                }}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle()}>#</th>
-                      {activeColumns.map((ci) => (
-                        <th key={ci} style={thStyle()}>{colName(ci)}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, ri) => (
-                      <tr key={ri}>
-                        <td style={tdStyle(true)}>{ri + 1}</td>
-                        {activeColumns.map((ci) => (
-                          <td key={ci} style={tdStyle(false)}>
-                            {truncate(applyTransforms(sourceMap[ci] ?? ci, row[sourceMap[ci] ?? ci] ?? ""), 80)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {/* ── Find & Replace Panel ── */}
-    {fnrPanel !== null && (
-      <div style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000,
-      }} onClick={() => setFnrPanel(null)}>
-        <div style={{
-          background: palette.surface, border: "1px solid " + (palette.border),
-          borderRadius: 12, padding: '24px 28px', width: 480,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-        }} onClick={e => e.stopPropagation()}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: palette.text, marginBottom: 4 }}>
-            ✎ Find &amp; Replace
-          </div>
-          <div style={{ fontSize: 12, color: palette.textDim, marginBottom: 18, fontFamily: baseFont }}>
-            Column: <span style={{ color: palette.accent }}>{colName(fnrPanel)}</span>
-          </div>
-
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: palette.textDim, marginBottom: 4, fontFamily: baseFont }}>Find</div>
-            <input
-              autoFocus
-              value={fnrFind}
-              onChange={e => { setFnrFind(e.target.value); setFnrError(null); }}
-              placeholder={fnrRegex ? 'Regular expression…' : 'Text to find…'}
-              style={{
-                width: '100%', background: palette.bg, border: "1px solid " + (palette.border),
-                color: palette.text, borderRadius: 6, padding: '8px 10px',
-                fontFamily: baseFont, fontSize: 13, outline: 'none', boxSizing: 'border-box',
-              }}
-              onKeyDown={e => e.key === 'Escape' && setFnrPanel(null)}
-            />
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, color: palette.textDim, marginBottom: 4, fontFamily: baseFont }}>Replace with</div>
-            <input
-              value={fnrReplace}
-              onChange={e => setFnrReplace(e.target.value)}
-              placeholder='Replacement text (empty = delete match)…'
-              style={{
-                width: '100%', background: palette.bg, border: "1px solid " + (palette.border),
-                color: palette.text, borderRadius: 6, padding: '8px 10px',
-                fontFamily: baseFont, fontSize: 13, outline: 'none', boxSizing: 'border-box',
-              }}
-              onKeyDown={e => { if (e.key === 'Enter') applyFnr(); if (e.key === 'Escape') setFnrPanel(null); }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: palette.textDim, userSelect: 'none' }}>
-              <input type="checkbox" checked={fnrRegex} onChange={e => { setFnrRegex(e.target.checked); setFnrError(null); }} />
-              Use regular expression
-            </label>
-            {fnrMatchCount !== null && !fnrError && (
-              <span style={{ marginLeft: 'auto', fontFamily: baseFont, fontSize: 11, color: fnrMatchCount > 0 ? palette.green : palette.textDim }}>
-                {fnrMatchCount > 0 ? (fnrMatchCount.toLocaleString()) + " row" + (fnrMatchCount !== 1 ? 's' : '') + " will change" : 'No matches'}
-              </span>
-            )}
-          </div>
-
-          {fnrError && (
-            <div style={{ fontSize: 12, color: palette.red, fontFamily: baseFont, marginBottom: 12 }}>{fnrError}</div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            {fnrSrcIdx !== null && transforms[fnrSrcIdx]?.length > 0 && (
-              <button onClick={() => { clearFnr(fnrPanel); setFnrPanel(null); }} style={{
-                background: 'transparent', border: "1px solid " + (palette.border),
-                color: palette.red, borderRadius: 6, padding: '8px 14px',
-                cursor: 'pointer', fontSize: 13, fontFamily: sansFont,
-              }}>Clear</button>
-            )}
-            <button onClick={() => setFnrPanel(null)} style={{
-              flex: 1, background: 'transparent', border: "1px solid " + (palette.border),
-              color: palette.textDim, borderRadius: 6, padding: '8px 0',
-              cursor: 'pointer', fontSize: 13, fontFamily: sansFont,
-            }}>Cancel</button>
-            <button onClick={applyFnr} disabled={!fnrFind} style={{
-              flex: 2, background: fnrFind ? palette.accent : palette.border,
-              color: fnrFind ? '#fff' : palette.textDim,
-              border: 'none', borderRadius: 6, padding: '9px 0',
-              cursor: fnrFind ? 'pointer' : 'not-allowed',
-              fontSize: 14, fontWeight: 700, fontFamily: sansFont,
-            }}>Apply →</button>
-          </div>
-        </div>
-      </div>
-    )}
-  );
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      background: palette.bg,
+      fontFamily: sansFont,
+      color: palette.text,
+      padding: "24px 32px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 16,
+      marginBottom: 24,
+      paddingBottom: 16,
+      borderBottom: "1px solid " + palette.border
+    }
+  }, /*#__PURE__*/React.createElement("a", {
+    href: "https://vdiscovery.com",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      display: 'inline-block',
+      lineHeight: 0,
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("img", {
+    src: "v-outline.png",
+    alt: "vDiscovery",
+    style: {
+      height: 28,
+      objectFit: 'contain'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 700,
+      letterSpacing: -0.5
+    }
+  }, "DAT Column Manager"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      fontFamily: baseFont,
+      fontSize: 11,
+      color: palette.green,
+      background: "rgba(63,185,80,0.1)",
+      border: "1px solid rgba(63,185,80,0.25)",
+      padding: "4px 10px",
+      borderRadius: 6
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "11",
+    height: "13",
+    viewBox: "0 0 11 13",
+    fill: "none"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "1",
+    y: "5",
+    width: "9",
+    height: "7",
+    rx: "1.5",
+    stroke: palette.green,
+    strokeWidth: "1.4"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M3 5V3.5a2.5 2.5 0 015 0V5",
+    stroke: palette.green,
+    strokeWidth: "1.4",
+    strokeLinecap: "round"
+  })), "100% local \u2014 no data leaves your browser"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 12,
+      alignItems: "center",
+      fontFamily: baseFont,
+      fontSize: 12,
+      color: palette.textDim
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: palette.tag,
+      padding: "4px 10px",
+      borderRadius: 6
+    }
+  }, fileName), /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: palette.tag,
+      padding: "4px 10px",
+      borderRadius: 6,
+      color: palette.orange
+    }
+  }, encoding?.toUpperCase()), /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: palette.tag,
+      padding: "4px 10px",
+      borderRadius: 6
+    }
+  }, totalRows.toLocaleString(), " rows"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: palette.tag,
+      padding: "4px 10px",
+      borderRadius: 6
+    }
+  }, originalColCount, " cols")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setFileName(null);
+      setHeaders([]);
+      setRows([]);
+      setRawText(null);
+      setRawBuffer(null);
+      setSelected(new Set());
+      setOrder([]);
+      setError(null);
+      setExported(false);
+      setRenames({});
+      setSourceMap({});
+      setEditingCol(null);
+      setOriginalColCount(0);
+      setTransforms({});
+      setFnrPanel(null);
+    },
+    style: {
+      background: "transparent",
+      border: "1px solid " + palette.border,
+      color: palette.textDim,
+      padding: "6px 14px",
+      borderRadius: 8,
+      cursor: "pointer",
+      fontFamily: sansFont,
+      fontSize: 13
+    }
+  }, "Open Different File"), /*#__PURE__*/React.createElement("button", {
+    title: "Reload page to get latest version \u2014 your column layout will be saved and restored",
+    onClick: () => {
+      try {
+        sessionStorage.setItem('dat-pending-restore', JSON.stringify({
+          fileName,
+          order,
+          selected: [...selected],
+          renames,
+          sourceMap,
+          transforms
+        }));
+      } catch {}
+      const url = new URL(window.location.href);
+      url.searchParams.set('_cb', Date.now());
+      window.location.replace(url.toString());
+    },
+    style: {
+      background: "transparent",
+      border: "1px solid " + palette.border,
+      color: palette.textDim,
+      padding: "6px 10px",
+      borderRadius: 8,
+      cursor: "pointer",
+      fontFamily: sansFont,
+      fontSize: 12,
+      title: "Refresh to latest version"
+    }
+  }, "\u21BB")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 24,
+      alignItems: "flex-start"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 340,
+      flexShrink: 0,
+      background: palette.surface,
+      borderRadius: 12,
+      border: "1px solid " + palette.border,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "14px 16px",
+      borderBottom: "1px solid " + palette.border,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 600,
+      fontSize: 14
+    }
+  }, "Columns", /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 8,
+      fontFamily: baseFont,
+      fontSize: 12,
+      color: palette.accent
+    }
+  }, activeColumns.length, "/", headers.length)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: selectAll,
+    style: linkBtnStyle()
+  }, "All"), /*#__PURE__*/React.createElement("button", {
+    onClick: selectNone,
+    style: linkBtnStyle()
+  }, "None"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxHeight: "calc(100vh - 220px)",
+      overflowY: "auto",
+      padding: "6px 0"
+    }
+  }, order.map((colIdx, i) => /*#__PURE__*/React.createElement("div", {
+    key: colIdx,
+    draggable: true,
+    onDragStart: () => onDragStart(i),
+    onDragOver: e => onDragOver(e, i),
+    onDragEnd: onDragEnd,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 14px",
+      cursor: "grab",
+      background: dragOverIdx === i ? palette.accentGlow : dragIdx === i ? palette.surfaceHover : "transparent",
+      borderLeft: dragOverIdx === i ? "3px solid " + palette.accent : "3px solid transparent",
+      transition: "background 0.1s",
+      opacity: !selected.has(colIdx) ? 0.4 : 1
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: baseFont,
+      fontSize: 11,
+      color: palette.textDim,
+      width: 20,
+      textAlign: "right",
+      flexShrink: 0,
+      userSelect: "none"
+    }
+  }, i + 1), /*#__PURE__*/React.createElement("div", {
+    onClick: () => toggleColumn(colIdx),
+    style: {
+      width: 18,
+      height: 18,
+      borderRadius: 4,
+      flexShrink: 0,
+      border: "2px solid " + (selected.has(colIdx) ? palette.accent : palette.border),
+      background: selected.has(colIdx) ? palette.accent : "transparent",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      transition: "all 0.15s"
+    }
+  }, selected.has(colIdx) && /*#__PURE__*/React.createElement("svg", {
+    width: "11",
+    height: "9",
+    viewBox: "0 0 11 9",
+    fill: "none"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M1 4L4 7L10 1",
+    stroke: palette.bg,
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }))), editingCol === colIdx ? /*#__PURE__*/React.createElement("input", {
+    ref: renameInputRef,
+    value: editingVal,
+    onChange: e => setEditingVal(e.target.value),
+    onBlur: commitRename,
+    onKeyDown: e => {
+      if (e.key === 'Enter') commitRename();
+      if (e.key === 'Escape') setEditingCol(null);
+    },
+    style: {
+      flex: 1,
+      fontFamily: baseFont,
+      fontSize: 13,
+      fontWeight: 500,
+      background: palette.bg,
+      border: "1px solid " + palette.accent,
+      color: palette.text,
+      borderRadius: 4,
+      padding: '2px 6px',
+      outline: 'none'
+    },
+    onClick: e => e.stopPropagation()
+  }) : /*#__PURE__*/React.createElement("span", {
+    title: "Click to rename",
+    onClick: e => {
+      e.stopPropagation();
+      startRename(colIdx);
+    },
+    style: {
+      fontFamily: baseFont,
+      fontSize: 13,
+      fontWeight: 500,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      flex: 1,
+      cursor: 'text',
+      color: renames[colIdx] ? palette.accent : palette.text
+    }
+  }, colName(colIdx)), /*#__PURE__*/React.createElement(FnrButton, {
+    colIdx: colIdx,
+    sourceMap: sourceMap,
+    transforms: transforms,
+    openFnr: openFnr,
+    accentColor: palette.accent,
+    dimColor: palette.textDim
+  }), /*#__PURE__*/React.createElement("button", {
+    title: "Duplicate column",
+    onClick: e => {
+      e.stopPropagation();
+      duplicateColumn(colIdx, i);
+    },
+    style: {
+      background: 'transparent',
+      border: 'none',
+      cursor: 'pointer',
+      color: palette.textDim,
+      padding: '0 3px',
+      flexShrink: 0,
+      fontSize: 14,
+      lineHeight: 1,
+      opacity: 0.5
+    },
+    onMouseEnter: e => e.currentTarget.style.opacity = '1',
+    onMouseLeave: e => e.currentTarget.style.opacity = '0.5'
+  }, "\u2295"), /*#__PURE__*/React.createElement("svg", {
+    width: "10",
+    height: "16",
+    viewBox: "0 0 10 16",
+    style: {
+      flexShrink: 0,
+      opacity: 0.3
+    }
+  }, /*#__PURE__*/React.createElement("circle", {
+    cx: "3",
+    cy: "3",
+    r: "1.5",
+    fill: palette.textDim
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "7",
+    cy: "3",
+    r: "1.5",
+    fill: palette.textDim
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "3",
+    cy: "8",
+    r: "1.5",
+    fill: palette.textDim
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "7",
+    cy: "8",
+    r: "1.5",
+    fill: palette.textDim
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "3",
+    cy: "13",
+    r: "1.5",
+    fill: palette.textDim
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "7",
+    cy: "13",
+    r: "1.5",
+    fill: palette.textDim
+  })))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 16,
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: doExport,
+    disabled: activeColumns.length === 0,
+    style: {
+      background: activeColumns.length > 0 ? palette.accent : palette.border,
+      color: activeColumns.length > 0 ? "#fff" : palette.textDim,
+      border: "none",
+      padding: "10px 24px",
+      borderRadius: 8,
+      fontWeight: 600,
+      fontSize: 14,
+      cursor: activeColumns.length > 0 ? "pointer" : "not-allowed",
+      fontFamily: sansFont,
+      transition: "transform 0.1s"
+    },
+    onMouseDown: e => activeColumns.length > 0 && (e.currentTarget.style.transform = "scale(0.97)"),
+    onMouseUp: e => e.currentTarget.style.transform = "scale(1)"
+  }, "Export DAT \u2192"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: baseFont,
+      fontSize: 12,
+      color: palette.textDim
+    }
+  }, activeColumns.length, " column", activeColumns.length !== 1 ? "s" : "", " \xD7 ", totalRows.toLocaleString(), " rows"), exported && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: baseFont,
+      fontSize: 12,
+      color: palette.green,
+      display: "flex",
+      alignItems: "center",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "14",
+    height: "14",
+    viewBox: "0 0 14 14",
+    fill: "none"
+  }, /*#__PURE__*/React.createElement("circle", {
+    cx: "7",
+    cy: "7",
+    r: "6",
+    stroke: palette.green,
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M4 7L6 9L10 5",
+    stroke: palette.green,
+    strokeWidth: "1.5",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  })), "Downloaded")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: palette.surface,
+      borderRadius: 12,
+      border: "1px solid " + palette.border,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "10px 16px",
+      borderBottom: "1px solid " + palette.border,
+      fontFamily: baseFont,
+      fontSize: 12,
+      color: palette.textDim
+    }
+  }, "Preview \u2014 first ", Math.min(PREVIEW_ROWS, rows.length), " rows", activeColumns.length === 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: palette.orange,
+      marginLeft: 12
+    }
+  }, "Select at least one column")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      overflowX: "auto",
+      overflowY: "auto",
+      maxHeight: "calc(100vh - 240px)"
+    }
+  }, activeColumns.length > 0 && /*#__PURE__*/React.createElement("table", {
+    style: {
+      borderCollapse: "collapse",
+      fontFamily: baseFont,
+      fontSize: 12,
+      whiteSpace: "nowrap",
+      width: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+    style: thStyle()
+  }, "#"), activeColumns.map(ci => /*#__PURE__*/React.createElement("th", {
+    key: ci,
+    style: thStyle()
+  }, colName(ci))))), /*#__PURE__*/React.createElement("tbody", null, rows.map((row, ri) => /*#__PURE__*/React.createElement("tr", {
+    key: ri
+  }, /*#__PURE__*/React.createElement("td", {
+    style: tdStyle(true)
+  }, ri + 1), activeColumns.map(ci => /*#__PURE__*/React.createElement("td", {
+    key: ci,
+    style: tdStyle(false)
+  }, truncate(applyTransforms(sourceMap[ci] ?? ci, row[sourceMap[ci] ?? ci] ?? ""), 80)))))))))))), fnrPanel !== null && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.6)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 2000
+    },
+    onClick: () => setFnrPanel(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: palette.surface,
+      border: "1px solid " + palette.border,
+      borderRadius: 12,
+      padding: '24px 28px',
+      width: 480,
+      boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
+    },
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700,
+      color: palette.text,
+      marginBottom: 4
+    }
+  }, "\u270E Find & Replace"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: palette.textDim,
+      marginBottom: 18,
+      fontFamily: baseFont
+    }
+  }, "Column: ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: palette.accent
+    }
+  }, colName(fnrPanel))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: palette.textDim,
+      marginBottom: 4,
+      fontFamily: baseFont
+    }
+  }, "Find"), /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    value: fnrFind,
+    onChange: e => {
+      setFnrFind(e.target.value);
+      setFnrError(null);
+    },
+    placeholder: fnrRegex ? 'Regular expression…' : 'Text to find…',
+    style: {
+      width: '100%',
+      background: palette.bg,
+      border: "1px solid " + palette.border,
+      color: palette.text,
+      borderRadius: 6,
+      padding: '8px 10px',
+      fontFamily: baseFont,
+      fontSize: 13,
+      outline: 'none',
+      boxSizing: 'border-box'
+    },
+    onKeyDown: e => e.key === 'Escape' && setFnrPanel(null)
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: palette.textDim,
+      marginBottom: 4,
+      fontFamily: baseFont
+    }
+  }, "Replace with"), /*#__PURE__*/React.createElement("input", {
+    value: fnrReplace,
+    onChange: e => setFnrReplace(e.target.value),
+    placeholder: "Replacement text (empty = delete match)\u2026",
+    style: {
+      width: '100%',
+      background: palette.bg,
+      border: "1px solid " + palette.border,
+      color: palette.text,
+      borderRadius: 6,
+      padding: '8px 10px',
+      fontFamily: baseFont,
+      fontSize: 13,
+      outline: 'none',
+      boxSizing: 'border-box'
+    },
+    onKeyDown: e => {
+      if (e.key === 'Enter') applyFnr();
+      if (e.key === 'Escape') setFnrPanel(null);
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      cursor: 'pointer',
+      fontSize: 12,
+      color: palette.textDim,
+      userSelect: 'none'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: fnrRegex,
+    onChange: e => {
+      setFnrRegex(e.target.checked);
+      setFnrError(null);
+    }
+  }), "Use regular expression"), fnrMatchCount !== null && !fnrError && /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 'auto',
+      fontFamily: baseFont,
+      fontSize: 11,
+      color: fnrMatchCount > 0 ? palette.green : palette.textDim
+    }
+  }, fnrMatchCount > 0 ? fnrMatchCount.toLocaleString() + " row" + (fnrMatchCount !== 1 ? 's' : '') + " will change" : 'No matches')), fnrError && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: palette.red,
+      fontFamily: baseFont,
+      marginBottom: 12
+    }
+  }, fnrError), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8
+    }
+  }, fnrSrcIdx !== null && transforms[fnrSrcIdx]?.length > 0 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      clearFnr(fnrPanel);
+      setFnrPanel(null);
+    },
+    style: {
+      background: 'transparent',
+      border: "1px solid " + palette.border,
+      color: palette.red,
+      borderRadius: 6,
+      padding: '8px 14px',
+      cursor: 'pointer',
+      fontSize: 13,
+      fontFamily: sansFont
+    }
+  }, "Clear"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setFnrPanel(null),
+    style: {
+      flex: 1,
+      background: 'transparent',
+      border: "1px solid " + palette.border,
+      color: palette.textDim,
+      borderRadius: 6,
+      padding: '8px 0',
+      cursor: 'pointer',
+      fontSize: 13,
+      fontFamily: sansFont
+    }
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: applyFnr,
+    disabled: !fnrFind,
+    style: {
+      flex: 2,
+      background: fnrFind ? palette.accent : palette.border,
+      color: fnrFind ? '#fff' : palette.textDim,
+      border: 'none',
+      borderRadius: 6,
+      padding: '9px 0',
+      cursor: fnrFind ? 'pointer' : 'not-allowed',
+      fontSize: 14,
+      fontWeight: 700,
+      fontFamily: sansFont
+    }
+  }, "Apply \u2192")))));
 }
-
 function VersionBadge() {
-  return (
-    <div style={{
-      position: 'fixed', bottom: 8, right: 12, zIndex: 9999,
-      fontFamily: 'monospace', fontSize: 10, color: '#30363d',
-      pointerEvents: 'none', userSelect: 'none', letterSpacing: '0.02em',
-    }}>
-      {APP_VERSION}
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      bottom: 8,
+      right: 12,
+      zIndex: 9999,
+      fontFamily: 'monospace',
+      fontSize: 10,
+      color: '#30363d',
+      pointerEvents: 'none',
+      userSelect: 'none',
+      letterSpacing: '0.02em'
+    }
+  }, APP_VERSION);
 }
-
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<><DatTool /><VersionBadge /></>);
-
-  </script>
+root.render(/*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(DatTool, null), /*#__PURE__*/React.createElement(VersionBadge, null)));</script>
 </body>
 </html>
