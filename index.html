@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DAT Column Manager</title>
+  <title>DAT Column Manager — vDiscovery</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -20,7 +21,7 @@
   <div id="root"></div>
   <script type="text/babel" data-presets="react">
 
-const APP_VERSION = 'v1.6.0 · 2026-03-27';
+const APP_VERSION = 'v1.7.0 · 2026-03-27';
 
 const DELIMITER = "\x14";
 const QUOTE = "\xFE";
@@ -459,7 +460,9 @@ function DatTool() {
             e.currentTarget.style.boxShadow = "none";
           }}
         >
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📂</div>
+          <a href="https://vdiscovery.com" target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ display: 'inline-block', lineHeight: 0, marginBottom: 20 }}>
+            <img src="vdiscovery-white.png" alt="vDiscovery" style={{ height: 64, objectFit: 'contain' }} />
+          </a>
           {pendingRestore ? (
             <>
               <div style={{ fontSize: 18, fontWeight: 600, color: palette.accent, marginBottom: 8 }}>
@@ -473,13 +476,13 @@ function DatTool() {
           ) : (
             <>
               <div style={{ fontSize: 20, fontWeight: 600, color: palette.text, marginBottom: 8 }}>
-                Drop a DAT file here
+                DAT Column Manager
               </div>
-              <div style={{ fontSize: 14, color: palette.textDim, lineHeight: 1.6 }}>
-                or click to browse<br />
-                <span style={{ fontFamily: baseFont, fontSize: 12, color: palette.accent }}>
-                  Concordance / Relativity format
-                </span>
+              <div style={{ fontSize: 14, color: palette.textDim, lineHeight: 1.6, marginBottom: 4 }}>
+                Drop a .dat file here or click to browse
+              </div>
+              <div style={{ fontFamily: baseFont, fontSize: 12, color: palette.accent }}>
+                Concordance / Relativity format
               </div>
             </>
           )}
@@ -521,6 +524,9 @@ function DatTool() {
         display: "flex", alignItems: "center", gap: 16, marginBottom: 24,
         paddingBottom: 16, borderBottom: `1px solid ${palette.border}`,
       }}>
+        <a href="https://vdiscovery.com" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', lineHeight: 0, flexShrink: 0 }}>
+          <img src="v-outline.png" alt="vDiscovery" style={{ height: 28, objectFit: 'contain' }} />
+        </a>
         <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.5 }}>
           DAT Column Manager
         </div>
