@@ -20,7 +20,7 @@
   <div id="root"></div>
   <script type="text/babel" data-presets="react">
 
-const APP_VERSION = 'v1.2.0 · 2026-03-27';
+const APP_VERSION = 'v1.3.0 · 2026-03-27';
 
 const DELIMITER = "\x14";
 const QUOTE = "\xFE";
@@ -141,6 +141,15 @@ function DatTool() {
     return () => window.removeEventListener("beforeunload", handleUnload);
   }, []);
 
+  // On mount: if we just reloaded to get a new version, restore pending column state
+  const [pendingRestore, setPendingRestore] = React.useState(() => {
+    try {
+      const saved = sessionStorage.getItem('dat-pending-restore');
+      if (saved) { sessionStorage.removeItem('dat-pending-restore'); return JSON.parse(saved); }
+    } catch {}
+    return null;
+  });
+
   const handleFile = React.useCallback(async (file) => {
     setError(null);
     setExported(false);
@@ -159,15 +168,34 @@ function DatTool() {
       setHeaders(hdrs);
       setRows(preview);
       setTotalRows(dataLines.length);
-      const all = new Set(hdrs.map((_, i) => i));
-      setSelected(all);
-      setOrder(hdrs.map((_, i) => i));
       setRawBuffer(buffer);
       setRawText(text);
+
+      // Restore column state if this is a version-refresh reload for the same file
+      if (pendingRestore && pendingRestore.fileName === file.name) {
+        setOrder(pendingRestore.order);
+        setSelected(new Set(pendingRestore.selected));
+        setRenames(pendingRestore.renames || {});
+        setSourceMap(pendingRestore.sourceMap || {});
+        // Re-expand headers array for any synthetic duplicate columns
+        const extraCount = (pendingRestore.order.length > 0 ? Math.max(...pendingRestore.order) : hdrs.length - 1) - hdrs.length + 1;
+        if (extraCount > 0) {
+          setHeaders(h => {
+            const ext = [...h];
+            for (let i = 0; i < extraCount; i++) ext.push('');
+            return ext;
+          });
+        }
+        setPendingRestore(null);
+      } else {
+        const all = new Set(hdrs.map((_, i) => i));
+        setSelected(all);
+        setOrder(hdrs.map((_, i) => i));
+      }
     } catch (e) {
       setError("Failed to parse file: " + e.message);
     }
-  }, []);
+  }, [pendingRestore]);
 
   const onDrop = React.useCallback((e) => {
     e.preventDefault();
@@ -315,15 +343,29 @@ function DatTool() {
           }}
         >
           <div style={{ fontSize: 48, marginBottom: 16 }}>📂</div>
-          <div style={{ fontSize: 20, fontWeight: 600, color: palette.text, marginBottom: 8 }}>
-            Drop a DAT file here
-          </div>
-          <div style={{ fontSize: 14, color: palette.textDim, lineHeight: 1.6 }}>
-            or click to browse<br />
-            <span style={{ fontFamily: baseFont, fontSize: 12, color: palette.accent }}>
-              Concordance / Relativity format
-            </span>
-          </div>
+          {pendingRestore ? (
+            <>
+              <div style={{ fontSize: 18, fontWeight: 600, color: palette.accent, marginBottom: 8 }}>
+                ↻ Version refreshed!
+              </div>
+              <div style={{ fontSize: 14, color: palette.textDim, lineHeight: 1.6 }}>
+                Re-open <span style={{ color: palette.text, fontFamily: baseFont }}>{pendingRestore.fileName}</span><br />
+                to restore your column layout
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 20, fontWeight: 600, color: palette.text, marginBottom: 8 }}>
+                Drop a DAT file here
+              </div>
+              <div style={{ fontSize: 14, color: palette.textDim, lineHeight: 1.6 }}>
+                or click to browse<br />
+                <span style={{ fontFamily: baseFont, fontSize: 12, color: palette.accent }}>
+                  Concordance / Relativity format
+                </span>
+              </div>
+            </>
+          )}
           <input
             ref={fileRef}
             type="file"
@@ -400,6 +442,31 @@ function DatTool() {
           }}
         >
           Open Different File
+        </button>
+        <button
+          title="Reload page to get latest version — your column layout will be saved and restored"
+          onClick={() => {
+            try {
+              sessionStorage.setItem('dat-pending-restore', JSON.stringify({
+                fileName,
+                order,
+                selected: [...selected],
+                renames,
+                sourceMap,
+              }));
+            } catch {}
+            const url = new URL(window.location.href);
+            url.searchParams.set('_cb', Date.now());
+            window.location.replace(url.toString());
+          }}
+          style={{
+            background: "transparent", border: `1px solid ${palette.border}`,
+            color: palette.textDim, padding: "6px 10px", borderRadius: 8,
+            cursor: "pointer", fontFamily: sansFont, fontSize: 12,
+            title: "Refresh to latest version",
+          }}
+        >
+          ↻
         </button>
       </div>
 
