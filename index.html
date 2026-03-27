@@ -20,7 +20,7 @@
   <div id="root"></div>
   <script type="text/babel" data-presets="react">
 
-const APP_VERSION = 'v1.4.0 · 2026-03-27';
+const APP_VERSION = 'v1.5.0 · 2026-03-27';
 
 const DELIMITER = "\x14";
 const QUOTE = "\xFE";
@@ -30,6 +30,27 @@ function detectEncoding(buffer) {
   if (bytes[0] === 0xFF && bytes[1] === 0xFE) return "utf-16le";
   if (bytes[0] === 0xFE && bytes[1] === 0xFF) return "utf-16be";
   if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return "utf-8";
+  // No BOM — scan for high bytes. If any byte is in 0x80–0x9F (Windows-1252 range)
+  // and the file doesn't look like valid UTF-8, treat as windows-1252.
+  // TextDecoder supports "windows-1252" natively.
+  const sample = new Uint8Array(buffer.slice(0, Math.min(buffer.byteLength, 4096)));
+  let hasHighBytes = false;
+  let invalidUtf8 = false;
+  let i = 0;
+  while (i < sample.length) {
+    const b = sample[i];
+    if (b < 0x80) { i++; continue; }
+    hasHighBytes = true;
+    // Check valid UTF-8 multi-byte sequence
+    let seqLen = b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : b >= 0xC0 ? 2 : 0;
+    if (seqLen === 0) { invalidUtf8 = true; break; }
+    for (let j = 1; j < seqLen; j++) {
+      if (i + j >= sample.length || (sample[i + j] & 0xC0) !== 0x80) { invalidUtf8 = true; break; }
+    }
+    if (invalidUtf8) break;
+    i += seqLen;
+  }
+  if (hasHighBytes && invalidUtf8) return "windows-1252";
   return "utf-8";
 }
 
@@ -300,6 +321,22 @@ function DatTool() {
       const view = new DataView(buf);
       for (let i = 0; i < outText.length; i++) view.setUint16(i * 2, outText.charCodeAt(i), false);
       blob = new Blob([bom, buf], { type: "application/octet-stream" });
+    } else if (encoding === "windows-1252") {
+      // Re-encode as Windows-1252: use TextEncoder fallback via a lossy approach.
+      // Since the original was decoded via TextDecoder("windows-1252"), the JS string
+      // has correct Unicode codepoints. We need to map back to 1252 bytes.
+      // The safest way: encode via a hidden TextDecoder with fatal mode isn't available for
+      // encoding, so we use a lookup table for the 0x80–0x9F block (the rest map 1:1 to Unicode).
+      const W1252_MAP = {0x20AC:0x80,0x201A:0x82,0x0192:0x83,0x201E:0x84,0x2026:0x85,0x2020:0x86,
+        0x2021:0x87,0x02C6:0x88,0x2030:0x89,0x0160:0x8A,0x2039:0x8B,0x0152:0x8C,0x017D:0x8E,
+        0x2018:0x91,0x2019:0x92,0x201C:0x93,0x201D:0x94,0x2022:0x95,0x2013:0x96,0x2014:0x97,
+        0x02DC:0x98,0x2122:0x99,0x0161:0x9A,0x203A:0x9B,0x0153:0x9C,0x017E:0x9E,0x0178:0x9F};
+      const bytes = new Uint8Array(outText.length);
+      for (let i = 0; i < outText.length; i++) {
+        const cp = outText.charCodeAt(i);
+        bytes[i] = W1252_MAP[cp] ?? (cp <= 0xFF ? cp : 0x3F); // 0x3F = '?' for unmappable chars
+      }
+      blob = new Blob([bytes], { type: "application/octet-stream" });
     } else {
       const encoder = new TextEncoder();
       let prefix = new Uint8Array(0);
