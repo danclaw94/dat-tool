@@ -20,7 +20,7 @@
   <div id="root"></div>
   <script type="text/babel" data-presets="react">
 
-const APP_VERSION = 'v1.1.0 · 2026-03-27';
+const APP_VERSION = 'v1.2.0 · 2026-03-27';
 
 const DELIMITER = "\x14";
 const QUOTE = "\xFE";
@@ -112,7 +112,15 @@ function DatTool() {
   const [exported, setExported] = React.useState(false);
   const [rawBuffer, setRawBuffer] = React.useState(null);
   const [rawText, setRawText] = React.useState(null);
+  // renames: { [colIdx]: newName } — overrides display/export name per column slot
+  const [renames, setRenames] = React.useState({});
+  // editingCol: colIdx currently being renamed inline (null = none)
+  const [editingCol, setEditingCol] = React.useState(null);
+  const [editingVal, setEditingVal] = React.useState('');
+  // sourceMap: { [colIdx]: originalColIdx } — for duplicate columns pointing at same data
+  const [sourceMap, setSourceMap] = React.useState({});
   const fileRef = React.useRef();
+  const renameInputRef = React.useRef();
 
   const PREVIEW_ROWS = 100;
 
@@ -180,6 +188,41 @@ function DatTool() {
   const selectAll = () => { setSelected(new Set(headers.map((_, i) => i))); setExported(false); };
   const selectNone = () => { setSelected(new Set()); setExported(false); };
 
+  // Returns the display name for a column slot
+  const colName = (colIdx) => renames[colIdx] ?? headers[colIdx] ?? '';
+
+  // Duplicate column: add synthetic slot pointing at same source data
+  const duplicateColumn = (colIdx, orderPos) => {
+    const srcIdx = sourceMap[colIdx] ?? colIdx;  // always point at original source
+    const newIdx = headers.length;
+    const baseName = colName(colIdx);
+    setHeaders(prev => [...prev, prev[srcIdx]]);  // placeholder — not used for name
+    setSourceMap(prev => ({ ...prev, [newIdx]: srcIdx }));
+    setRenames(prev => ({ ...prev, [newIdx]: baseName + ' (copy)' }));
+    setOrder(prev => {
+      const next = [...prev];
+      next.splice(orderPos + 1, 0, newIdx);
+      return next;
+    });
+    setSelected(prev => { const s = new Set(prev); s.add(newIdx); return s; });
+    setExported(false);
+  };
+
+  // Start inline rename
+  const startRename = (colIdx) => {
+    setEditingCol(colIdx);
+    setEditingVal(colName(colIdx));
+    setTimeout(() => renameInputRef.current?.select(), 30);
+  };
+
+  const commitRename = () => {
+    if (editingCol !== null) {
+      const val = editingVal.trim();
+      setRenames(prev => ({ ...prev, [editingCol]: val || colName(editingCol) }));
+    }
+    setEditingCol(null);
+  };
+
   const onDragStart = (i) => setDragIdx(i);
   const onDragOver = (e, i) => { e.preventDefault(); setDragOverIdx(i); };
   const onDragEnd = () => {
@@ -199,12 +242,17 @@ function DatTool() {
   const doExport = () => {
     if (!rawText) return;
     const lines = rawText.split("\n").filter((l) => l.trim().length > 0);
-    const keepIndices = order.filter((i) => selected.has(i));
-    const outLines = lines.map((line) => {
+    const keepSlots = order.filter((i) => selected.has(i));
+    // For each slot: which source column index to read data from
+    const keepSourceIndices = keepSlots.map(i => sourceMap[i] ?? i);
+    // Header row uses renamed names
+    const headerRow = encodeRow(keepSlots.map(i => colName(i)));
+    const dataLines = lines.slice(1).map((line) => {
       const fields = parseRow(line);
-      const kept = keepIndices.map((i) => fields[i] ?? "");
+      const kept = keepSourceIndices.map((i) => fields[i] ?? "");
       return encodeRow(kept);
     });
+    const outLines = [headerRow, ...dataLines];
     const outText = outLines.join("\n") + "\n";
 
     let blob;
@@ -343,6 +391,7 @@ function DatTool() {
           onClick={() => {
             setFileName(null); setHeaders([]); setRows([]); setRawText(null); setRawBuffer(null);
             setSelected(new Set()); setOrder([]); setError(null); setExported(false);
+            setRenames({}); setSourceMap({}); setEditingCol(null);
           }}
           style={{
             background: "transparent", border: `1px solid ${palette.border}`,
@@ -415,12 +464,46 @@ function DatTool() {
                     </svg>
                   )}
                 </div>
-                <span style={{
-                  fontFamily: baseFont, fontSize: 13, fontWeight: 500,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1,
-                }}>
-                  {headers[colIdx]}
-                </span>
+                {editingCol === colIdx ? (
+                  <input
+                    ref={renameInputRef}
+                    value={editingVal}
+                    onChange={e => setEditingVal(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setEditingCol(null); }}
+                    style={{
+                      flex: 1, fontFamily: baseFont, fontSize: 13, fontWeight: 500,
+                      background: palette.bg, border: `1px solid ${palette.accent}`,
+                      color: palette.text, borderRadius: 4, padding: '2px 6px', outline: 'none',
+                    }}
+                    onClick={e => e.stopPropagation()}
+                  />
+                ) : (
+                  <span
+                    title="Click to rename"
+                    onClick={e => { e.stopPropagation(); startRename(colIdx); }}
+                    style={{
+                      fontFamily: baseFont, fontSize: 13, fontWeight: 500,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1,
+                      cursor: 'text',
+                      color: renames[colIdx] ? palette.accent : palette.text,
+                    }}
+                  >
+                    {colName(colIdx)}
+                  </span>
+                )}
+                {/* Duplicate button */}
+                <button
+                  title="Duplicate column"
+                  onClick={e => { e.stopPropagation(); duplicateColumn(colIdx, i); }}
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: palette.textDim, padding: '0 3px', flexShrink: 0,
+                    fontSize: 14, lineHeight: 1, opacity: 0.5,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '0.5'}
+                >⊕</button>
                 <svg width="10" height="16" viewBox="0 0 10 16" style={{ flexShrink: 0, opacity: 0.3 }}>
                   <circle cx="3" cy="3" r="1.5" fill={palette.textDim} />
                   <circle cx="7" cy="3" r="1.5" fill={palette.textDim} />
@@ -490,7 +573,7 @@ function DatTool() {
                     <tr>
                       <th style={thStyle()}>#</th>
                       {activeColumns.map((ci) => (
-                        <th key={ci} style={thStyle()}>{headers[ci]}</th>
+                        <th key={ci} style={thStyle()}>{colName(ci)}</th>
                       ))}
                     </tr>
                   </thead>
@@ -500,7 +583,7 @@ function DatTool() {
                         <td style={tdStyle(true)}>{ri + 1}</td>
                         {activeColumns.map((ci) => (
                           <td key={ci} style={tdStyle(false)}>
-                            {truncate(row[ci] ?? "", 80)}
+                            {truncate(row[sourceMap[ci] ?? ci] ?? "", 80)}
                           </td>
                         ))}
                       </tr>
