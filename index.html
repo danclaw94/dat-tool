@@ -20,7 +20,7 @@
   <div id="root"></div>
   <script type="text/babel" data-presets="react">
 
-const APP_VERSION = 'v1.3.0 · 2026-03-27';
+const APP_VERSION = 'v1.4.0 · 2026-03-27';
 
 const DELIMITER = "\x14";
 const QUOTE = "\xFE";
@@ -35,10 +35,12 @@ function detectEncoding(buffer) {
 
 function parseRow(line) {
   const sep = QUOTE + DELIMITER + QUOTE;
-  let trimmed = line;
+  // Strip line endings FIRST, then strip the single enclosing quote on each end.
+  // The previous double-strip approach corrupted empty trailing fields:
+  // þfield1þ\x14þfield2þ\x14þþ → after two strips → field1þ\x14þfield2þ\x14
+  // which splits incorrectly, contaminating field2 with þ\x14.
+  let trimmed = line.replace(/[\r\n]+$/, "");
   if (trimmed.startsWith(QUOTE)) trimmed = trimmed.slice(1);
-  if (trimmed.endsWith(QUOTE)) trimmed = trimmed.slice(0, -1);
-  trimmed = trimmed.replace(/[\r\n]+$/, "");
   if (trimmed.endsWith(QUOTE)) trimmed = trimmed.slice(0, -1);
   return trimmed.split(sep);
 }
@@ -112,6 +114,7 @@ function DatTool() {
   const [exported, setExported] = React.useState(false);
   const [rawBuffer, setRawBuffer] = React.useState(null);
   const [rawText, setRawText] = React.useState(null);
+  const [originalColCount, setOriginalColCount] = React.useState(0); // tracks source column count (not synthetic dupes)
   // renames: { [colIdx]: newName } — overrides display/export name per column slot
   const [renames, setRenames] = React.useState({});
   // editingCol: colIdx currently being renamed inline (null = none)
@@ -168,6 +171,7 @@ function DatTool() {
       setHeaders(hdrs);
       setRows(preview);
       setTotalRows(dataLines.length);
+      setOriginalColCount(hdrs.length);
       setRawBuffer(buffer);
       setRawText(text);
 
@@ -288,9 +292,13 @@ function DatTool() {
       const bom = new Uint8Array([0xFF, 0xFE]);
       const buf = new ArrayBuffer(outText.length * 2);
       const view = new DataView(buf);
-      for (let i = 0; i < outText.length; i++) {
-        view.setUint16(i * 2, outText.charCodeAt(i), true);
-      }
+      for (let i = 0; i < outText.length; i++) view.setUint16(i * 2, outText.charCodeAt(i), true);
+      blob = new Blob([bom, buf], { type: "application/octet-stream" });
+    } else if (encoding === "utf-16be") {
+      const bom = new Uint8Array([0xFE, 0xFF]);
+      const buf = new ArrayBuffer(outText.length * 2);
+      const view = new DataView(buf);
+      for (let i = 0; i < outText.length; i++) view.setUint16(i * 2, outText.charCodeAt(i), false);
       blob = new Blob([bom, buf], { type: "application/octet-stream" });
     } else {
       const encoder = new TextEncoder();
@@ -427,13 +435,13 @@ function DatTool() {
           <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6 }}>{fileName}</span>
           <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6, color: palette.orange }}>{encoding?.toUpperCase()}</span>
           <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6 }}>{totalRows.toLocaleString()} rows</span>
-          <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6 }}>{headers.length} cols</span>
+          <span style={{ background: palette.tag, padding: "4px 10px", borderRadius: 6 }}>{originalColCount} cols</span>
         </div>
         <button
           onClick={() => {
             setFileName(null); setHeaders([]); setRows([]); setRawText(null); setRawBuffer(null);
             setSelected(new Set()); setOrder([]); setError(null); setExported(false);
-            setRenames({}); setSourceMap({}); setEditingCol(null);
+            setRenames({}); setSourceMap({}); setEditingCol(null); setOriginalColCount(0);
           }}
           style={{
             background: "transparent", border: `1px solid ${palette.border}`,
