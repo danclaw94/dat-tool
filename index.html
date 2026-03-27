@@ -21,7 +21,7 @@
   <div id="root"></div>
   <script type="text/babel" data-presets="react">
 
-const APP_VERSION = 'v1.7.0 · 2026-03-27';
+const APP_VERSION = 'v1.8.0 · 2026-03-27';
 
 const DELIMITER = "\x14";
 const QUOTE = "\xFE";
@@ -120,6 +120,26 @@ function linkBtnStyle() {
     fontFamily: sansFont, padding: "2px 4px",
     textDecoration: "underline", textUnderlineOffset: 2,
   };
+}
+
+function FnrButton({ colIdx, sourceMap, transforms, openFnr, accentColor, dimColor }) {
+  const srcIdx = sourceMap[colIdx] ?? colIdx;
+  const hasTransform = !!(transforms[srcIdx]?.length);
+  return (
+    <button
+      title={hasTransform ? 'Find & Replace active — click to edit' : 'Find & Replace in this column'}
+      onClick={e => { e.stopPropagation(); openFnr(colIdx); }}
+      style={{
+        background: hasTransform ? accentColor + '22' : 'transparent',
+        border: hasTransform ? `1px solid ${accentColor}55` : 'none',
+        cursor: 'pointer', color: hasTransform ? accentColor : dimColor,
+        padding: '0 4px', flexShrink: 0, fontSize: 12, lineHeight: 1,
+        borderRadius: 3, opacity: hasTransform ? 1 : 0.5,
+      }}
+      onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+      onMouseLeave={e => e.currentTarget.style.opacity = hasTransform ? '1' : '0.5'}
+    >✎</button>
+  );
 }
 
 function DatTool() {
@@ -434,6 +454,10 @@ function DatTool() {
 
   const activeColumns = order.filter((i) => selected.has(i));
 
+  // FNR panel — computed outside JSX to avoid IIFE-in-JSX Babel issues
+  const fnrSrcIdx = fnrPanel !== null ? (sourceMap[fnrPanel] ?? fnrPanel) : null;
+  const fnrMatchCount = (fnrPanel !== null && fnrFind) ? previewCount(fnrSrcIdx, fnrFind, fnrReplace, fnrRegex) : null;
+
   if (!fileName) {
     return (
       <div style={{
@@ -684,25 +708,14 @@ function DatTool() {
                   </span>
                 )}
                 {/* Find & Replace button */}
-                {(() => {
-                  const srcIdx = sourceMap[colIdx] ?? colIdx;
-                  const hasTransform = !!(transforms[srcIdx]?.length);
-                  return (
-                    <button
-                      title={hasTransform ? `Find & Replace active — click to edit` : 'Find & Replace in this column'}
-                      onClick={e => { e.stopPropagation(); openFnr(colIdx); }}
-                      style={{
-                        background: hasTransform ? palette.accent + '22' : 'transparent',
-                        border: hasTransform ? `1px solid ${palette.accent}55` : 'none',
-                        cursor: 'pointer', color: hasTransform ? palette.accent : palette.textDim,
-                        padding: '0 4px', flexShrink: 0, fontSize: 12, lineHeight: 1,
-                        borderRadius: 3, opacity: hasTransform ? 1 : 0.5,
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-                      onMouseLeave={e => e.currentTarget.style.opacity = hasTransform ? '1' : '0.5'}
-                    >✎</button>
-                  );
-                })()}
+                <FnrButton
+                  colIdx={colIdx}
+                  sourceMap={sourceMap}
+                  transforms={transforms}
+                  openFnr={openFnr}
+                  accentColor={palette.accent}
+                  dimColor={palette.textDim}
+                />
                 {/* Duplicate button */}
                 <button
                   title="Duplicate column"
@@ -809,100 +822,94 @@ function DatTool() {
     </div>
 
     {/* ── Find & Replace Panel ── */}
-    {fnrPanel !== null && (() => {
-      const srcIdx = sourceMap[fnrPanel] ?? fnrPanel;
-      const matchCount = fnrFind ? previewCount(srcIdx, fnrFind, fnrReplace, fnrRegex) : null;
-      return (
+    {fnrPanel !== null && (
+      <div style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000,
+      }} onClick={() => setFnrPanel(null)}>
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000,
-        }} onClick={() => setFnrPanel(null)}>
-          <div style={{
-            background: palette.surface, border: `1px solid ${palette.border}`,
-            borderRadius: 12, padding: '24px 28px', width: 480,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-          }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: palette.text, marginBottom: 4 }}>
-              ✎ Find &amp; Replace
-            </div>
-            <div style={{ fontSize: 12, color: palette.textDim, marginBottom: 18, fontFamily: baseFont }}>
-              Column: <span style={{ color: palette.accent }}>{colName(fnrPanel)}</span>
-            </div>
+          background: palette.surface, border: `1px solid ${palette.border}`,
+          borderRadius: 12, padding: '24px 28px', width: 480,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+        }} onClick={e => e.stopPropagation()}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: palette.text, marginBottom: 4 }}>
+            ✎ Find &amp; Replace
+          </div>
+          <div style={{ fontSize: 12, color: palette.textDim, marginBottom: 18, fontFamily: baseFont }}>
+            Column: <span style={{ color: palette.accent }}>{colName(fnrPanel)}</span>
+          </div>
 
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: palette.textDim, marginBottom: 4, fontFamily: baseFont }}>Find</div>
-              <input
-                autoFocus
-                value={fnrFind}
-                onChange={e => { setFnrFind(e.target.value); setFnrError(null); }}
-                placeholder={fnrRegex ? 'Regular expression…' : 'Text to find…'}
-                style={{
-                  width: '100%', background: palette.bg, border: `1px solid ${palette.border}`,
-                  color: palette.text, borderRadius: 6, padding: '8px 10px',
-                  fontFamily: baseFont, fontSize: 13, outline: 'none',
-                  boxSizing: 'border-box',
-                }}
-                onKeyDown={e => e.key === 'Escape' && setFnrPanel(null)}
-              />
-            </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: palette.textDim, marginBottom: 4, fontFamily: baseFont }}>Find</div>
+            <input
+              autoFocus
+              value={fnrFind}
+              onChange={e => { setFnrFind(e.target.value); setFnrError(null); }}
+              placeholder={fnrRegex ? 'Regular expression…' : 'Text to find…'}
+              style={{
+                width: '100%', background: palette.bg, border: `1px solid ${palette.border}`,
+                color: palette.text, borderRadius: 6, padding: '8px 10px',
+                fontFamily: baseFont, fontSize: 13, outline: 'none', boxSizing: 'border-box',
+              }}
+              onKeyDown={e => e.key === 'Escape' && setFnrPanel(null)}
+            />
+          </div>
 
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: palette.textDim, marginBottom: 4, fontFamily: baseFont }}>Replace with</div>
-              <input
-                value={fnrReplace}
-                onChange={e => setFnrReplace(e.target.value)}
-                placeholder='Replacement text (empty = delete match)…'
-                style={{
-                  width: '100%', background: palette.bg, border: `1px solid ${palette.border}`,
-                  color: palette.text, borderRadius: 6, padding: '8px 10px',
-                  fontFamily: baseFont, fontSize: 13, outline: 'none',
-                  boxSizing: 'border-box',
-                }}
-                onKeyDown={e => { if (e.key === 'Enter') applyFnr(); if (e.key === 'Escape') setFnrPanel(null); }}
-              />
-            </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: palette.textDim, marginBottom: 4, fontFamily: baseFont }}>Replace with</div>
+            <input
+              value={fnrReplace}
+              onChange={e => setFnrReplace(e.target.value)}
+              placeholder='Replacement text (empty = delete match)…'
+              style={{
+                width: '100%', background: palette.bg, border: `1px solid ${palette.border}`,
+                color: palette.text, borderRadius: 6, padding: '8px 10px',
+                fontFamily: baseFont, fontSize: 13, outline: 'none', boxSizing: 'border-box',
+              }}
+              onKeyDown={e => { if (e.key === 'Enter') applyFnr(); if (e.key === 'Escape') setFnrPanel(null); }}
+            />
+          </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: palette.textDim, userSelect: 'none' }}>
-                <input type="checkbox" checked={fnrRegex} onChange={e => { setFnrRegex(e.target.checked); setFnrError(null); }} />
-                Use regular expression
-              </label>
-              {matchCount !== null && !fnrError && (
-                <span style={{ marginLeft: 'auto', fontFamily: baseFont, fontSize: 11, color: matchCount > 0 ? palette.green : palette.textDim }}>
-                  {matchCount > 0 ? `${matchCount.toLocaleString()} row${matchCount !== 1 ? 's' : ''} will change` : 'No matches'}
-                </span>
-              )}
-            </div>
-
-            {fnrError && (
-              <div style={{ fontSize: 12, color: palette.red, fontFamily: baseFont, marginBottom: 12 }}>{fnrError}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: palette.textDim, userSelect: 'none' }}>
+              <input type="checkbox" checked={fnrRegex} onChange={e => { setFnrRegex(e.target.checked); setFnrError(null); }} />
+              Use regular expression
+            </label>
+            {fnrMatchCount !== null && !fnrError && (
+              <span style={{ marginLeft: 'auto', fontFamily: baseFont, fontSize: 11, color: fnrMatchCount > 0 ? palette.green : palette.textDim }}>
+                {fnrMatchCount > 0 ? `${fnrMatchCount.toLocaleString()} row${fnrMatchCount !== 1 ? 's' : ''} will change` : 'No matches'}
+              </span>
             )}
+          </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              {transforms[srcIdx]?.length > 0 && (
-                <button onClick={() => { clearFnr(fnrPanel); setFnrPanel(null); }} style={{
-                  background: 'transparent', border: `1px solid ${palette.border}`,
-                  color: palette.red, borderRadius: 6, padding: '8px 14px',
-                  cursor: 'pointer', fontSize: 13, fontFamily: sansFont,
-                }}>Clear</button>
-              )}
-              <button onClick={() => setFnrPanel(null)} style={{
-                flex: 1, background: 'transparent', border: `1px solid ${palette.border}`,
-                color: palette.textDim, borderRadius: 6, padding: '8px 0',
+          {fnrError && (
+            <div style={{ fontSize: 12, color: palette.red, fontFamily: baseFont, marginBottom: 12 }}>{fnrError}</div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            {fnrSrcIdx !== null && transforms[fnrSrcIdx]?.length > 0 && (
+              <button onClick={() => { clearFnr(fnrPanel); setFnrPanel(null); }} style={{
+                background: 'transparent', border: `1px solid ${palette.border}`,
+                color: palette.red, borderRadius: 6, padding: '8px 14px',
                 cursor: 'pointer', fontSize: 13, fontFamily: sansFont,
-              }}>Cancel</button>
-              <button onClick={applyFnr} disabled={!fnrFind} style={{
-                flex: 2, background: fnrFind ? palette.accent : palette.border,
-                color: fnrFind ? '#fff' : palette.textDim,
-                border: 'none', borderRadius: 6, padding: '9px 0',
-                cursor: fnrFind ? 'pointer' : 'not-allowed',
-                fontSize: 14, fontWeight: 700, fontFamily: sansFont,
-              }}>Apply →</button>
-            </div>
+              }}>Clear</button>
+            )}
+            <button onClick={() => setFnrPanel(null)} style={{
+              flex: 1, background: 'transparent', border: `1px solid ${palette.border}`,
+              color: palette.textDim, borderRadius: 6, padding: '8px 0',
+              cursor: 'pointer', fontSize: 13, fontFamily: sansFont,
+            }}>Cancel</button>
+            <button onClick={applyFnr} disabled={!fnrFind} style={{
+              flex: 2, background: fnrFind ? palette.accent : palette.border,
+              color: fnrFind ? '#fff' : palette.textDim,
+              border: 'none', borderRadius: 6, padding: '9px 0',
+              cursor: fnrFind ? 'pointer' : 'not-allowed',
+              fontSize: 14, fontWeight: 700, fontFamily: sansFont,
+            }}>Apply →</button>
           </div>
         </div>
-      );
-    })()}
+      </div>
+    )}
   );
 }
 
